@@ -1,4 +1,4 @@
-# A FreeCAD postprocessor for CNC function of the Snapmaker 2 A350
+# A FreeCAD postprocessor for the Snapmaker 2 A350 CNC function
 
 import re
 import argparse
