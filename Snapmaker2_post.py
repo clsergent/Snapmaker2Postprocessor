@@ -14,7 +14,7 @@ import PathScripts.PathUtil as PathUtil
 import PathScripts.PostUtils as PostUtils
 import PathScripts.PathJob as PathJob
 
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 __author__ = 'clsergent'
 __licence__ = 'EUPL1.2'
 
@@ -293,16 +293,18 @@ class Gcode(list):
 class CoordinatesAction(argparse.Action):
     """argparse Action to handle coordinates x,y,z"""
     def __call__(self, parser, namespace, values, option_string):
-        match = re.match('^ *(\d+\.\d{0,3}),? *(\d+\.\d{0,3}),? *(\d+\.\d{0,3}) *$', coords)
+        match = re.match('^ *(\d+\.\d{0,3}),? *(\d+\.\d{0,3}),? *(\d+\.\d{0,3}) *$', values)
+        print(values)
         if match:
             # setattr(namespace, self.dest, 'G0 X{0} Y{1} Z{2}'.format(*match.groups()))
-            params = {key: value for key, values in zip(("X", "Y", "Z"), match.groups())}
+            params = {key: float(value) for key, value in zip(("X", "Y", "Z"), match.groups())}
             setattr(namespace, self.dest, Command("G0", **params))
-        raise argparse.ArgumentError(None, message='invalid coordinates provided')
+        else:
+            raise argparse.ArgumentError(None, message='invalid coordinates provided')
 
 
 class Postprocessor:
-    def __init__(self, *args, name='snapmaker postprocessor'):
+    def __init__(self):
         log.info('postprocessor loaded')
         self.configure()
         self.gcode = Gcode(configuration=self.conf)
@@ -342,7 +344,7 @@ class Postprocessor:
         
         parser.add_argument('--show-editor', action='store_true', default=SHOW_EDITOR,
                             help='pop up editor before writing output')
-        parser.add_argument('--no-show-editor', action='store_false',dest='show-editor',
+        parser.add_argument('--no-show-editor', action='store_false', dest='show-editor',
                             help='do not pop up editor before writing output')
 
         parser.add_argument('--precision', type=int, default=PRECISION, help='number of digits of precision')
@@ -492,6 +494,10 @@ class Postprocessor:
                 elif cmd.Name == 'message':
                     self.gcode.append(Comment(f'message: {cmd}'))
 
+                # Comments
+                if self.conf.comments and (match := re.match('^\((.+)\)$', cmd.Name)):
+                    self.gcode.append(Comment(match.groups()[0]))
+
                 # Ignore unknown commands
                 else:
                     log.warning(f'Command ignored: {cmd.Name}')
@@ -513,7 +519,7 @@ class Postprocessor:
                 # use custom gcode if provided
                 if type(self.conf.tool_change) is str:
                     for line in self.conf.tool_change.splitlines():
-                        self.gcode.append(l)
+                        self.gcode.append(line)
 
                 # fallback to pause
                 else:
@@ -603,15 +609,15 @@ class Postprocessor:
             if coolantMode != 'None':
                 self.gcode.append(Comment(f'COOLANT OFF: {coolantMode}'))
                 self.addCommand(GCODE_COOLANT['off'])
-        
+
+        # Final position
+        if self.conf.final_position:
+            self.gcode.append(self.conf.final_position)
+
         # Postamble gcode
         self.gcode.append(Comment('POSTAMBLE'))
         for line in self.conf.postamble.splitlines():
             self.gcode.append(line)
-        
-        # Final position
-        if self.conf.final_position:
-            self.gcode.append(self.conf.final_position)
         
         log.info(f'Postprocessing done')
         
@@ -635,9 +641,4 @@ def export(objects, filename: str, argstring: str):
 
 
 if __name__ == '__main__':
-    export = Postprocessor().export
-
-
-# PEP8 format passed using: http://pep8online.com/, which primarily covers
-# indentation and line length. Some other aspects of PEP8 which have not
-# been applied yet may be applied in future updates.
+    raise Warning('this module is not intended to be used standalone')
