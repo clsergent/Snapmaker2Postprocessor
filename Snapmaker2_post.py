@@ -16,7 +16,7 @@ import PathScripts.PathJob as PathJob
 
 __version__ = '1.0.1'
 __author__ = 'clsergent'
-__licence__ = 'EUPL1.2'
+__license__ = 'EUPL1.2'
 
 # Immutable values
 GCODE_MOTION_MODE = "G90"  # G90 - Absolute moves
