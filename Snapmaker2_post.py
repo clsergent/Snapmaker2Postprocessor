@@ -14,7 +14,7 @@ import PathScripts.PathUtil as PathUtil
 import PathScripts.PostUtils as PostUtils
 import PathScripts.PathJob as PathJob
 
-__version__ = '1.0.1'
+__version__ = '1.0.2'
 __author__ = 'clsergent'
 __licence__ = 'EUPL1.2'
 
@@ -92,10 +92,10 @@ def getSelectedJob() -> PathJob.ObjectJob:
 def getJob(obj) -> PathJob.ObjectJob:
     """return the parent job of the provided object"""
     try:
-        return object.Proxy.GetJob(obj)
+        return obj.Proxy.getJob(obj)
     except AttributeError:
-        log.info(f'No parent job was found for {obj}, returning selected job')
-        return getSelectedJob()
+        log.info(f'No parent job was found for {obj}')
+        return None
 
 
 def getThumbnail(job) -> str:
@@ -529,15 +529,21 @@ class Postprocessor:
 
     def export(self, objects, filename: str, argstring: str):
         log.info(f'Post Processor: {__name__}\nPostprocessing...')
+        print(objects)
 
         if argstring:
             self.configure(shlex.split(argstring))
             self.gcode = Gcode(configuration=self.conf)
 
         for obj in objects:
-            self.job = getJob(obj)
-            if self.job:
+            if job := getJob(obj):
+                self.job = job
                 break
+        if self.job is None:
+            self.job = getSelectedJob()
+
+        if self.job is None:
+            log.error(f'no job was found, please select a job before calling the postprocessor')
 
         self.gcode.append(Header('Header Start'))
         self.gcode.append(Header('Exported by FreeCAD'))
