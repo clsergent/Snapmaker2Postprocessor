@@ -294,7 +294,6 @@ class CoordinatesAction(argparse.Action):
     """argparse Action to handle coordinates x,y,z"""
     def __call__(self, parser, namespace, values, option_string):
         match = re.match('^ *(\d+\.\d{0,3}),? *(\d+\.\d{0,3}),? *(\d+\.\d{0,3}) *$', values)
-        print(values)
         if match:
             # setattr(namespace, self.dest, 'G0 X{0} Y{1} Z{2}'.format(*match.groups()))
             params = {key: float(value) for key, value in zip(("X", "Y", "Z"), match.groups())}
@@ -529,7 +528,6 @@ class Postprocessor:
 
     def export(self, objects, filename: str, argstring: str):
         log.info(f'Post Processor: {__name__}\nPostprocessing...')
-        print(objects)
 
         if argstring:
             self.configure(shlex.split(argstring))
