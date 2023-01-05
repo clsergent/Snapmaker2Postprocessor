@@ -13,7 +13,7 @@ import PathScripts.PathUtil as PathUtil
 import PathScripts.PostUtils as PostUtils
 import PathScripts.PathJob as PathJob
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 __author__ = 'clsergent'
 __license__ = 'EUPL1.2'
 
