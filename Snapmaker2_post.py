@@ -111,8 +111,6 @@ def getThumbnail(job) -> str:
         FreeCADGui.Selection.clearSelection()
 
         for obj in selection:  # restore selection
-            if hasattr(obj, 'Object'):
-                obj = obj.Object
             FreeCADGui.Selection.addSelection(obj.Document.Name, obj.Name)
 
         with tempfile.NamedTemporaryFile('r+b', suffix='.png') as file:
