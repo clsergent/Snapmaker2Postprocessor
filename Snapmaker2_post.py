@@ -2,7 +2,6 @@
 
 import re
 import argparse
-import logging
 import shlex
 from datetime import datetime
 import base64
@@ -67,8 +66,6 @@ GCODE_SPACER = " "
 # TOOLTIP_ARGS = parser.format_help()
 TOOLTIP = 'Snapmaker 2 Postprocessor for FreeCAD'
 
-log = logging.getLogger('Snapmaker postprocessor')
-
 
 def getSelectedJob() -> PathJob.ObjectJob:
     """return the selected job"""
@@ -82,10 +79,10 @@ def getSelectedJob() -> PathJob.ObjectJob:
 
         if len(jobs) > 0:
             if len(jobs) > 1:
-                log.warning('Only one job should be selected, using the first one')
+                FreeCAD.Console.PrintWarning('Only one job should be selected, using the first one\n')
             return jobs[0]
     else:  # TODO: get job from document if GUI not up
-        log.error('No job can be found by selection without GUI')
+        FreeCAD.Console.PrintError('No job can be found by selection without GUI\n')
     return None
 
 
@@ -94,7 +91,7 @@ def getJob(obj) -> PathJob.ObjectJob:
     try:
         return obj.Proxy.getJob(obj)
     except AttributeError:
-        log.info(f'No parent job was found for {obj}')
+        FreeCAD.Console.PrintLog(f'No parent job was found for {obj}\n')
         return None
 
 
@@ -146,7 +143,7 @@ def getRapidSpeeds(obj: Path = None, job=None):
     elif job is not None:
         vRapidSpeed, hRapidSpeed = job.SetupSheet.VertRapid, job.SetupSheet.HorizRapid
     else:
-        log.warning('Rapid speed not added, please set VertRapid and HorizRapid for the selected job')
+        FreeCAD.Console.PrintWarning('Rapid speed not added, please set VertRapid and HorizRapid for the selected job\n')
         vRapidSpeed, hRapidSpeed = None, None
     return vRapidSpeed, hRapidSpeed
 
@@ -206,7 +203,7 @@ class Command:
                 speed = convertSpeed(self._cmd.Parameters[param], self.units)
                 line.append(f'{param}{speed:.{self.precision}f}')
                 if speed <= 0:
-                    log.error(f'{self._cmd.Name}: negative speed inserted ({speed})')
+                    FreeCAD.Console.PrintError(f'{self._cmd.Name}: negative or null speed provided ({speed})\n')
 
             elif param == "S":
                 # Spindle speed handling (Snapmaker uses spindle speed in percent rather than rpm)
@@ -304,7 +301,6 @@ class CoordinatesAction(argparse.Action):
 
 class Postprocessor:
     def __init__(self):
-        log.info('postprocessor loaded')
         self.configure()
         self.gcode = Gcode(configuration=self.conf)
         self.job = None
@@ -414,7 +410,7 @@ class Postprocessor:
         position = {param: self.gcode.lastParameter(param, default=0) for param in ("X", "Y", "Z")}
 
         if drillR < drillZ:
-            log.error(f'Drill cycle error: R less than Z')
+            FreeCAD.Console.PrintError(f'Drill cycle error: R less than Z\n')
             return []
 
         # set retract Z
@@ -473,7 +469,7 @@ class Postprocessor:
         if not hasattr(obj, 'Path'):
             return self.gcode
 
-        log.info(f'Processing object {obj.Name}')
+        FreeCAD.Console.PrintLog(f'Processing object {obj.Name}\n')
 
         for cmd in obj.Path.Commands:
             # Allowed commands
@@ -499,7 +495,7 @@ class Postprocessor:
 
                 # Ignore unknown commands
                 else:
-                    log.warning(f'Command ignored: {cmd.Name}')
+                    FreeCAD.Console.PrintWarning(f'Command ignored: {cmd.Name}\n')
 
                 continue
 
@@ -527,7 +523,7 @@ class Postprocessor:
         return self.gcode
 
     def export(self, objects, filename: str, argstring: str):
-        log.info(f'Post Processor: {__name__}\nPostprocessing...')
+        FreeCAD.Console.PrintMessage(f'Post Processor: {__name__}\nPostprocessing...\n')
 
         if argstring:
             self.configure(shlex.split(argstring))
@@ -541,7 +537,7 @@ class Postprocessor:
             self.job = getSelectedJob()
 
         if self.job is None:
-            log.error(f'no job was found, please select a job before calling the postprocessor')
+            FreeCAD.Console.PrintError(f'no job was found, please select a job before calling the postprocessor\n')
 
         self.gcode.append(Header('Header Start'))
         self.gcode.append(Header('Exported by FreeCAD'))
@@ -566,12 +562,12 @@ class Postprocessor:
         for obj in objects:
             # Skip invalid objects
             if not hasattr(obj, 'Path'):
-                log.warning(f'Object {obj.Name} is not a valid Path. Please select only Paths and Compounds')
+                FreeCAD.Console.PrintWarning(f'Object {obj.Name} is not a valid Path. Please select only Paths and Compounds\n')
                 continue
             
             # Skip inactive objects
             if PathUtil.opProperty(obj, "Active") is False:
-                log.info(f'Object {obj.Name} is inactive and will be skipped')
+                FreeCAD.Console.PrintWarning(f'Object {obj.Name} is inactive and will be skipped\n')
                 continue
 
             # Insert pause to change tool if required
@@ -623,7 +619,7 @@ class Postprocessor:
         for line in self.conf.postamble.splitlines():
             self.gcode.append(line)
         
-        log.info(f'Postprocessing done')
+        FreeCAD.Console.PrintMessage(f'Postprocessing done\n')
         
         # Show editor
         data = str(self.gcode)
