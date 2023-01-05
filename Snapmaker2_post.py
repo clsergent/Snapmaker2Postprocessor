@@ -13,7 +13,7 @@ import PathScripts.PathUtil as PathUtil
 import PathScripts.PostUtils as PostUtils
 import PathScripts.PathJob as PathJob
 
-__version__ = '1.0.3'
+__version__ = '1.0.4'
 __author__ = 'clsergent'
 __license__ = 'EUPL1.2'
 
@@ -111,6 +111,8 @@ def getThumbnail(job) -> str:
         FreeCADGui.Selection.clearSelection()
 
         for obj in selection:  # restore selection
+            if hasattr(obj, 'Object'):
+                obj = obj.Object
             FreeCADGui.Selection.addSelection(obj.Document.Name, obj.Name)
 
         with tempfile.NamedTemporaryFile('r+b', suffix='.png') as file:
