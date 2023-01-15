@@ -492,7 +492,7 @@ class Postprocessor:
                     self.gcode.append(Comment(f'message: {cmd}'))
 
                 # Comments
-                if self.conf.comments and (match := re.match('^\((.+)\)$', cmd.Name)):
+                elif self.conf.comments and (match := re.match('^\((.+)\)$', cmd.Name)):
                     self.gcode.append(Comment(match.groups()[0]))
 
                 # Ignore unknown commands
