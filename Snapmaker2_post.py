@@ -56,8 +56,8 @@ GCODE_FINAL_POSITION = None  # None = No movement at end of program
 # GCODE commands
 GCODE_UNITS = {'mm': "G21", 'in': "G20"}
 GCODE_COOLANT = {'mist': "F7", 'flood': "M8", 'off': "M9"}
-GCODE_COMMANDS = ["G0", "G00", "G1", "G01", "G2", "G02", "G3", "G03", "G4", "G04", "G17", "G21", "G28", "G54", "G90",
-                  "M3", "M03", "M4", "M04", "M5", "M05", "M17", "M18", "M25", "M76", "M81"]
+GCODE_COMMANDS = ["G0", "G00", "G1", "G01", "G2", "G02", "G3", "G03", "G4", "G04", "G17", "G21", "G28", "G54", "G80",
+                  "G90", "M3", "M03", "M4", "M04", "M5", "M05", "M17", "M18", "M25", "M76", "M81"]
 GCODE_PARAMETERS = ["X", "Y", "Z", "A", "B", "C", "I", "J", "F", "S", "T", "Q", "R", "L", "H", "D", "P", "O"]
 GCODE_COMMENT_SYMBOLS = (';', '')   # start and end of comments signs
 GCODE_PAUSE = ("M25", "M76")  # M6 not handled by marlin
