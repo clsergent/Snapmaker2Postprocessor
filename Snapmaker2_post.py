@@ -346,7 +346,7 @@ class Postprocessor:
 
         parser.add_argument('--precision', type=int, default=PRECISION, help='number of digits of precision')
 
-        parser.add_argument('--pause', choices=GCODE_PAUSE, default=PAUSE, help='unit in use')
+        parser.add_argument('--pause', choices=GCODE_PAUSE, default=PAUSE, help=f'pause command to use')
 
         parser.add_argument('--units', choices=GCODE_UNITS.keys(), default=UNITS, help='unit in use')
         
@@ -381,8 +381,8 @@ class Postprocessor:
 
         parser.add_argument('--final-position', action=CoordinatesAction, default=GCODE_FINAL_POSITION,
                             help='Position to reach at the end of work (i.e. "3.175, 4.702, 50.915")')
-        
-        self.conf = parser.parse_args(*args)
+
+        self.conf = parser.parse_args(args=args)
 
     def addCommand(self, name, *, obj: Path = None, **parameters):
         cmd = Command(name, **parameters)
@@ -528,7 +528,7 @@ class Postprocessor:
         FreeCAD.Console.PrintMessage(f'Post Processor: {__name__}\nPostprocessing...\n')
 
         if argstring:
-            self.configure(shlex.split(argstring))
+            self.configure(*shlex.split(argstring))
             self.gcode = Gcode(configuration=self.conf)
 
         for obj in objects:
