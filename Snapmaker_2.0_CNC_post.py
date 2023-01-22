@@ -1,4 +1,5 @@
-# A FreeCAD postprocessor for the Snapmaker 2 A350 CNC function
+# A FreeCAD postprocessor for the Snapmaker 2.0 CNC function
+
 import os
 import re
 import argparse
@@ -13,7 +14,7 @@ import PathScripts.PathUtil as PathUtil
 import PathScripts.PostUtils as PostUtils
 import PathScripts.PathJob as PathJob
 
-__version__ = '1.0.5'
+__version__ = '1.0.6'
 __author__ = 'clsergent'
 __license__ = 'EUPL1.2'
 
@@ -25,8 +26,8 @@ GCODE_WORK_PLANE = "G17"  # G17 only, XY plane, for vertical milling
 # Default config values
 UNITS = 'mm'
 PRECISION = 3  # Decimal places displayed for metric
-MAX_SPINDLE_SPEED = 12000   # Max rpm spindle speed (value for snapmaker 2 A/T X50)
-MIN_SPINDLE_SPEED = 6000    # Min rpm spindle speed (value for snapmaker 2 A/T X50)
+MAX_SPINDLE_SPEED = 12000   # Max rpm spindle speed (value for Snapmaker 2.0 CNC module)
+MIN_SPINDLE_SPEED = 6000    # Min rpm spindle speed (value for Snapmaker 2.0 CNC module)
 TRANSLATE_DRILL_CYCLES = True  # If true, G81, G82, and G83 are translated, ignored otherwise
 DRILL_RETRACT_MODE = "G98"  # End of drill-cycle retraction type. G99 is the alternative (require TRANSLATE_DRILL_CYCLES)
 TOOL_CHANGE = True  # if True, insert a tool change (M25). May also be a custom gcode
@@ -41,7 +42,7 @@ INCLUDE_HEADER = True  # Output header in output gcode file
 INCLUDE_THUMBNAIL = True  # Add a PNG thumbnail in header
 INCLUDE_COMMENTS = True  # Comments in output gcode file
 INCLUDE_LINE_NUMBERS = False  # Output line numbers in output gcode file
-INCLUDE_TOOL_NUMBER = False  # include tool number change (TXX), unsupported by snapmaker, but may be used in simulation
+INCLUDE_TOOL_NUMBER = False  # include tool number change (TXX), unsupported by Snapmaker, but may be used in simulation
 
 # FreeCAD GUI options
 SHOW_EDITOR = True  # Display the resulting gcode file
@@ -63,9 +64,7 @@ GCODE_COMMENT_SYMBOLS = (';', '')   # start and end of comments signs
 GCODE_PAUSE = ("M25", "M76")  # M6 not handled by marlin
 GCODE_SPACER = " "
 
-# TOOLTIP_ARGS = parser.format_help()
-TOOLTIP = 'Snapmaker 2 Postprocessor for FreeCAD'
-
+TOOLTIP = 'Snapmaker 2.0 CNC postprocessor for FreeCAD'
 
 def getSelectedJob() -> PathJob.ObjectJob:
     """return the selected job"""
@@ -127,26 +126,28 @@ def getThumbnail(job) -> str:
 
 
 def convertPosition(position: float, units=UNITS) -> float:
+    """convert FreeCAD position value according to the given unit"""
     return float(FreeCAD.Units.Quantity(position, FreeCAD.Units.Length).getValueAs(units))
 
 
 def convertSpeed(speed: float, units=UNITS) -> float:
+    """convert FreeCAD speed value according to the given unit"""
     return float(FreeCAD.Units.Quantity(speed, FreeCAD.Units.Velocity).getValueAs(f'{units}/min'))
 
 
 def speedAsPercent(speed: float) -> int:
-    """return spindle speed as percentage (snapmaker specific)"""
+    """return spindle speed (rpm) as percentage (Snapmaker specific)"""
     return int(max(min(speed, MAX_SPINDLE_SPEED), MIN_SPINDLE_SPEED) * 100 // MAX_SPINDLE_SPEED)
 
 
-def getRapidSpeeds(obj: Path = None, job=None):
+def getRapidSpeeds(obj: Path = None, job=None) -> (float, float):
     """Return rapid speeds"""
     if obj is not None and hasattr(obj, "ToolController"):
         vRapidSpeed, hRapidSpeed = obj.ToolController.VertRapid, obj.ToolController.HorizRapid
     elif job is not None:
         vRapidSpeed, hRapidSpeed = job.SetupSheet.VertRapid, job.SetupSheet.HorizRapid
     else:
-        FreeCAD.Console.PrintWarning('Rapid speed not added, please set VertRapid and HorizRapid for the selected job\n')
+        FreeCAD.Console.PrintWarning('No Rapid speeds (vertical and horizontal) set for the selected job\n')
         vRapidSpeed, hRapidSpeed = None, None
     return vRapidSpeed, hRapidSpeed
 
@@ -310,7 +311,8 @@ class Postprocessor:
     
     def configure(self, *args):
         """set postprocessor values"""
-        parser = argparse.ArgumentParser(prog='snapmaker2_post', description='FreeCAD postprocessor for Snapmaker 2')
+        parser = argparse.ArgumentParser(prog='Snapmaker_2.0_CNC_post',
+                                         description='Snapmaker 2.0 CNC postprocessor for FreeCAD')
 
         parser.add_argument('--header', action='store_true', default=INCLUDE_HEADER, help='include header')
         parser.add_argument('--no-header', action='store_false', dest='header', help='remove header')
@@ -369,7 +371,7 @@ class Postprocessor:
         parser.add_argument('--no-tool-change', action='store_false', dest='tool-change', help='remove tool change gcode')
 
         parser.add_argument('--tool-number', action='store_true', default=INCLUDE_TOOL_NUMBER,
-                            help='insert tool number gcode TXX (unsupported by snapmaker but may be used for simulation)')
+                            help='insert tool number gcode TXX (unsupported by Snapmaker but may be used for simulation)')
         parser.add_argument('--no-tool-number', action='store_false', dest='tool-change', help='remove tool number gcode')
 
         parser.add_argument('--spindle-wait', type=int, default=SPINDLE_WAIT,
@@ -580,7 +582,7 @@ class Postprocessor:
                     self.addCommand(self.conf.pause)
                 tool = obj.ToolController.FullName
                 if self.conf.tool_number:
-                    # not Command(...) because unsupported by snapmaker
+                    # not Command(...) because unsupported by Snapmaker
                     self.gcode.append(f'T{obj.ToolController.ToolNumber:02n}')
 
             # Pre-operation gcode
