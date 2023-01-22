@@ -12,7 +12,7 @@ Its functions cover:
 - rapid moves (speed is not added by FreeCAD to GCODE)
 
 ## Usage
-Move the `Snapmaker_2.0_CNC_post.py` file to the FreeCAD macros directory. It should appear within the list of postprocessors of the Path workbench. 
+Move the `Snapmaker_2_CNC_post.py` file to the FreeCAD macros directory. It should appear within the list of postprocessors of the Path workbench. 
 
 Check the [wiki](https://github.com/clsergent/Snapmaker2Postprocessor/wiki) if you need more information.
 
