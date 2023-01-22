@@ -1,5 +1,5 @@
 # A FreeCAD postprocessor for the Snapmaker 2 A350 CNC function
-
+import os
 import re
 import argparse
 import shlex
@@ -13,7 +13,7 @@ import PathScripts.PathUtil as PathUtil
 import PathScripts.PostUtils as PostUtils
 import PathScripts.PathJob as PathJob
 
-__version__ = '1.0.4'
+__version__ = '1.0.5'
 __author__ = 'clsergent'
 __license__ = 'EUPL1.2'
 
@@ -115,10 +115,11 @@ def getThumbnail(job) -> str:
                 obj = obj.Object
             FreeCADGui.Selection.addSelection(obj.Document.Name, obj.Name)
 
-        with tempfile.NamedTemporaryFile('r+b', suffix='.png') as file:
-            FreeCADGui.activeDocument().activeView().saveImage(file.name, 720, 480, 'Transparent')  # save file
-            file.seek(0)
-            data = file.read()
+        with tempfile.TemporaryDirectory() as temp:
+            path = os.path.join(temp, 'thumbnail.png')
+            FreeCADGui.activeDocument().activeView().saveImage(path, 720, 480, 'Transparent')
+            with open(path, 'rb') as file:
+                data = file.read()
 
         return f'thumbnail: data:image/png;base64,{base64.b64encode(data).decode()}'
     else:
