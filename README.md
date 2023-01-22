@@ -14,8 +14,9 @@ Its functions cover:
 ## Usage
 Move the `Snapmaker_2.0_CNC_post.py` file to the FreeCAD macros directory. It should appear within the list of postprocessors of the Path workbench. 
 
+Check the [wiki](https://github.com/clsergent/Snapmaker2Postprocessor/wiki) if you need more information.
 
-Refer to [FreeCAD documentation](https://wiki.freecadweb.org/Path_Post) on how to use this postprocessor.
+Refer to [FreeCAD documentation](https://wiki.freecadweb.org/Path_Post) on how to use a postprocessor.
 
 
 ## Limitations
