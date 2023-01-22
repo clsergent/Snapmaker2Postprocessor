@@ -311,7 +311,7 @@ class Postprocessor:
     
     def configure(self, *args):
         """set postprocessor values"""
-        parser = argparse.ArgumentParser(prog='Snapmaker_2.0_CNC_post',
+        parser = argparse.ArgumentParser(prog='Snapmaker_2_CNC_post',
                                          description='Snapmaker 2.0 CNC postprocessor for FreeCAD')
 
         parser.add_argument('--header', action='store_true', default=INCLUDE_HEADER, help='include header')
