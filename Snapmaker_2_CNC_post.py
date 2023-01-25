@@ -4,6 +4,7 @@ import os
 import re
 import argparse
 import shlex
+import timeit
 from datetime import datetime
 import base64
 import tempfile
@@ -24,6 +25,7 @@ GCODE_WORK_PLANE = "G17"  # G17 only, XY plane, for vertical milling
 
 
 # Default config values
+MACHINE = None  # machine in use (for boundary check)
 UNITS = 'mm'
 PRECISION = 3  # Decimal places displayed for metric
 MAX_SPINDLE_SPEED = 12000   # Max rpm spindle speed (value for Snapmaker 2.0 CNC module)
@@ -32,10 +34,11 @@ TRANSLATE_DRILL_CYCLES = True  # If true, G81, G82, and G83 are translated, igno
 DRILL_RETRACT_MODE = "G98"  # End of drill-cycle retraction type. G99 is the alternative (require TRANSLATE_DRILL_CYCLES)
 TOOL_CHANGE = True  # if True, insert a tool change (M25). May also be a custom gcode
 SPINDLE_WAIT = 0  # Time in seconds to wait after M3 M4 M5 (0 means until all commands are done = M400)
-PAUSE = "M76"
+PAUSE = "M76"  # pause command
 REMOVE_DUPLICATES = True  # True: Commands are suppressed if they are the same as the previous line
 LINE_START = 1  # Line number starting value
 LINE_INCREMENT = 1  # Line number increment
+BOUNDARIES_CHECK = True
 
 # File options
 INCLUDE_HEADER = True  # Output header in output gcode file
@@ -43,6 +46,16 @@ INCLUDE_THUMBNAIL = True  # Add a PNG thumbnail in header
 INCLUDE_COMMENTS = True  # Comments in output gcode file
 INCLUDE_LINE_NUMBERS = False  # Output line numbers in output gcode file
 INCLUDE_TOOL_NUMBER = False  # include tool number change (TXX), unsupported by Snapmaker, but may be used in simulation
+
+# Machine options
+# https://snapmaker.com/snapmaker-original/specs
+# https://snapmaker.com/snapmaker-2/specs
+BOUNDARIES = dict(original=(90, 90, 50),
+                  original_z_extension=(90, 90, 146),
+                  **dict.fromkeys(('A150',), (160, 160, 90)),
+                  **dict.fromkeys(('A250', 'A250T'), (230, 250, 180)),
+                  **dict.fromkeys(('A350', 'A350T'), (320, 350, 275)),
+                  )
 
 # FreeCAD GUI options
 SHOW_EDITOR = True  # Display the resulting gcode file
@@ -65,6 +78,7 @@ GCODE_PAUSE = ("M25", "M76")  # M6 not handled by marlin
 GCODE_SPACER = " "
 
 TOOLTIP = 'Snapmaker 2.0 CNC postprocessor for FreeCAD'
+
 
 def getSelectedJob() -> PathJob.ObjectJob:
     """return the selected job"""
@@ -329,7 +343,7 @@ class Postprocessor:
 
         parser.add_argument('--line-numbers', action='store_true', default=INCLUDE_LINE_NUMBERS,
                             help='prefix with line numbers')
-        parser.add_argument('--no-line-numbers', action='store_false', dest='line-numbers',
+        parser.add_argument('--no-line-numbers', action='store_false', dest='line_numbers',
                             help='do not prefix with line numbers')
 
         parser.add_argument('--line-start', type=int, default=LINE_START,
@@ -339,12 +353,12 @@ class Postprocessor:
         
         parser.add_argument('--remove-duplicates', action='store_true', default=REMOVE_DUPLICATES,
                             help='remove duplicate lines')
-        parser.add_argument('--keep-duplicates', action='store_false', dest='remove-duplicates',
+        parser.add_argument('--keep-duplicates', action='store_false', dest='remove_duplicates',
                             help='keep duplicate lines')
         
         parser.add_argument('--show-editor', action='store_true', default=SHOW_EDITOR,
                             help='pop up editor before writing output')
-        parser.add_argument('--no-show-editor', action='store_false', dest='show-editor',
+        parser.add_argument('--no-show-editor', action='store_false', dest='show_editor',
                             help='do not pop up editor before writing output')
 
         parser.add_argument('--precision', type=int, default=PRECISION, help='number of digits of precision')
@@ -363,16 +377,16 @@ class Postprocessor:
         
         parser.add_argument('--translate-drill-cycles', action='store_true', default=TRANSLATE_DRILL_CYCLES,
                             help='convert drill cycles (G81, G82, and G83)')
-        parser.add_argument('--no-translate-drill-cycles', action='store_false', dest='translate-drill-cycle',
+        parser.add_argument('--no-translate-drill-cycles', action='store_false', dest='translate_drill_cycle',
                             help='ignore drill cycles (G81, G82, and G83)')
 
         parser.add_argument('--tool-change', nargs='?', const=TOOL_CHANGE, default=TOOL_CHANGE,
                             help='insert tool change gcode (optional gcode may be provided)')
-        parser.add_argument('--no-tool-change', action='store_false', dest='tool-change', help='remove tool change gcode')
+        parser.add_argument('--no-tool-change', action='store_false', dest='tool_change', help='remove tool change gcode')
 
         parser.add_argument('--tool-number', action='store_true', default=INCLUDE_TOOL_NUMBER,
                             help='insert tool number gcode TXX (unsupported by Snapmaker but may be used for simulation)')
-        parser.add_argument('--no-tool-number', action='store_false', dest='tool-change', help='remove tool number gcode')
+        parser.add_argument('--no-tool-number', action='store_false', dest='tool_change', help='remove tool number gcode')
 
         parser.add_argument('--spindle-wait', type=int, default=SPINDLE_WAIT,
                             help='wait for spindle to reach desired speed after M3 or M4')
@@ -384,6 +398,14 @@ class Postprocessor:
 
         parser.add_argument('--final-position', action=CoordinatesAction, default=GCODE_FINAL_POSITION,
                             help='Position to reach at the end of work (i.e. "3.175, 4.702, 50.915")')
+
+        parser.add_argument('--machine', choices=BOUNDARIES.keys(), default=MACHINE,
+                            help='machine name (for boundary check)')
+
+        parser.add_argument('--boundaries-check', action='store_true', default=BOUNDARIES_CHECK,
+                            help='check boundaries according to the machine build area')
+        parser.add_argument('--no-boundaries-check', action='store_false', dest='boundaries_check',
+                            help='disable boundaries check')
 
         self.conf = parser.parse_args(args=args)
 
@@ -527,6 +549,38 @@ class Postprocessor:
 
         return self.gcode
 
+    def checkBoundaries(self) -> bool:
+        """check boundaries and return whether it succeeded"""
+        FreeCAD.Console.PrintLog('Boundaries check/n')
+
+        if self.conf.machine not in BOUNDARIES.keys():
+            FreeCAD.Console.PrintError(f'Boundary check failed, no valid machine name supplied')
+            return False
+
+        boundaries = dict(X=[0, 0], Y=[0, 0], Z=[0, 0])
+        position = dict(X=0, Y=0, Z=0)
+        relative = False
+
+        for cmd in self.gcode:
+            if type(cmd) is Command:
+                if cmd.Name == 'G90':
+                    relative = False
+                elif cmd.Name == 'G91':
+                    relative = False
+                elif cmd.Name in ('G0', 'G1'):
+                    for axis in boundaries.keys():
+                        if (value := cmd.Parameters.get(axis)) is not None:
+                            if relative:
+                                position[axis] += value
+                            else:
+                                position[axis] = value
+                            boundaries[axis][0] = max(boundaries[axis][0], position[axis])
+                            boundaries[axis][1] = min(boundaries[axis][1], position[axis])
+
+        for axis, limit in zip(boundaries.keys(), BOUNDARIES[self.conf.machine]):
+            if abs(boundaries[axis][0] - boundaries[axis][1]) > limit:
+                FreeCAD.Console.PrintWarning(f'Boundary check: job exceeds machine limit on {axis} axis\n')
+
     def export(self, objects, filename: str, argstring: str):
         FreeCAD.Console.PrintMessage(f'Post Processor: {__name__}\nPostprocessing...\n')
 
@@ -625,7 +679,11 @@ class Postprocessor:
             self.gcode.append(line)
         
         FreeCAD.Console.PrintMessage(f'Postprocessing done\n')
-        
+
+        # boundaries check
+        if self.conf.boundaries_check:
+            self.checkBoundaries()
+
         # Show editor
         data = str(self.gcode)
         if FreeCAD.GuiUp and self.conf.show_editor:
