@@ -32,7 +32,7 @@ TRANSLATE_DRILL_CYCLES = True  # If true, G81, G82, and G83 are translated, igno
 DRILL_RETRACT_MODE = "G98"  # End of drill-cycle retraction type. G99 is the alternative (require TRANSLATE_DRILL_CYCLES)
 TOOL_CHANGE = True  # if True, insert a tool change (M25). May also be a custom gcode
 SPINDLE_WAIT = 0  # Time in seconds to wait after M3 M4 M5 (0 means until all commands are done = M400)
-PAUSE = "M76"
+PAUSE = "M76"  # pause command
 REMOVE_DUPLICATES = True  # True: Commands are suppressed if they are the same as the previous line
 LINE_START = 1  # Line number starting value
 LINE_INCREMENT = 1  # Line number increment
@@ -329,7 +329,7 @@ class Postprocessor:
 
         parser.add_argument('--line-numbers', action='store_true', default=INCLUDE_LINE_NUMBERS,
                             help='prefix with line numbers')
-        parser.add_argument('--no-line-numbers', action='store_false', dest='line-numbers',
+        parser.add_argument('--no-line-numbers', action='store_false', dest='line_numbers',
                             help='do not prefix with line numbers')
 
         parser.add_argument('--line-start', type=int, default=LINE_START,
@@ -339,12 +339,12 @@ class Postprocessor:
         
         parser.add_argument('--remove-duplicates', action='store_true', default=REMOVE_DUPLICATES,
                             help='remove duplicate lines')
-        parser.add_argument('--keep-duplicates', action='store_false', dest='remove-duplicates',
+        parser.add_argument('--keep-duplicates', action='store_false', dest='remove_duplicates',
                             help='keep duplicate lines')
         
         parser.add_argument('--show-editor', action='store_true', default=SHOW_EDITOR,
                             help='pop up editor before writing output')
-        parser.add_argument('--no-show-editor', action='store_false', dest='show-editor',
+        parser.add_argument('--hide-editor', action='store_false', dest='show_editor',
                             help='do not pop up editor before writing output')
 
         parser.add_argument('--precision', type=int, default=PRECISION, help='number of digits of precision')
@@ -363,16 +363,16 @@ class Postprocessor:
         
         parser.add_argument('--translate-drill-cycles', action='store_true', default=TRANSLATE_DRILL_CYCLES,
                             help='convert drill cycles (G81, G82, and G83)')
-        parser.add_argument('--no-translate-drill-cycles', action='store_false', dest='translate-drill-cycle',
+        parser.add_argument('--no-translate-drill-cycles', action='store_false', dest='translate_drill_cycle',
                             help='ignore drill cycles (G81, G82, and G83)')
 
         parser.add_argument('--tool-change', nargs='?', const=TOOL_CHANGE, default=TOOL_CHANGE,
                             help='insert tool change gcode (optional gcode may be provided)')
-        parser.add_argument('--no-tool-change', action='store_false', dest='tool-change', help='remove tool change gcode')
+        parser.add_argument('--no-tool-change', action='store_false', dest='tool_change', help='remove tool change gcode')
 
         parser.add_argument('--tool-number', action='store_true', default=INCLUDE_TOOL_NUMBER,
                             help='insert tool number gcode TXX (unsupported by Snapmaker but may be used for simulation)')
-        parser.add_argument('--no-tool-number', action='store_false', dest='tool-change', help='remove tool number gcode')
+        parser.add_argument('--no-tool-number', action='store_false', dest='tool_change', help='remove tool number gcode')
 
         parser.add_argument('--spindle-wait', type=int, default=SPINDLE_WAIT,
                             help='wait for spindle to reach desired speed after M3 or M4')
