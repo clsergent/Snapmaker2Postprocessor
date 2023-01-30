@@ -50,11 +50,11 @@ INCLUDE_TOOL_NUMBER = False  # include tool number change (TXX), unsupported by 
 # Machine options
 # https://snapmaker.com/snapmaker-original/specs
 # https://snapmaker.com/snapmaker-2/specs
-BOUNDARIES = dict(original=(90, 90, 50),
-                  original_z_extension=(90, 90, 146),
-                  **dict.fromkeys(('A150',), (160, 160, 90)),
-                  **dict.fromkeys(('A250', 'A250T'), (230, 250, 180)),
-                  **dict.fromkeys(('A350', 'A350T'), (320, 350, 275)),
+BOUNDARIES = dict(original=dict(X=90, Y=90, Z=50),
+                  original_z_extension=dict(X=90, Y=90, Z=146),
+                  **dict.fromkeys(('A150',), dict(X=160, Y=160, Z=90)),
+                  **dict.fromkeys(('A250', 'A250T'), dict(X=230, Y=250, Z=180)),
+                  **dict.fromkeys(('A350', 'A350T'), dict(X=320, Y=350, Z=275)),
                   )
 
 # FreeCAD GUI options
@@ -308,19 +308,21 @@ class Gcode(list):
 class CoordinatesAction(argparse.Action):
     """argparse Action to handle coordinates x,y,z"""
     def __call__(self, parser, namespace, values, option_string):
-        match = re.match('^ *(\d+\.\d{0,3}),? *(\d+\.\d{0,3}),? *(\d+\.\d{0,3}) *$', values)
+        match = re.match('^ *(-?\d+\.?\d*),? *(-?\d+\.?\d*),? *(-?\d+\.?\d*) *$', values)
         if match:
             # setattr(namespace, self.dest, 'G0 X{0} Y{1} Z{2}'.format(*match.groups()))
             params = {key: float(value) for key, value in zip(("X", "Y", "Z"), match.groups())}
-            setattr(namespace, self.dest, Command("G0", **params))
+            setattr(namespace, self.dest, params)
         else:
             raise argparse.ArgumentError(None, message='invalid coordinates provided')
 
 
 class Postprocessor:
     def __init__(self):
-        self.configure()
-        self.gcode = Gcode(configuration=self.conf)
+        # self.configure()
+        # self.gcode = Gcode(configuration=self.conf)
+        self.gcode = None
+        self.conf = None
         self.job = None
     
     def configure(self, *args):
@@ -397,15 +399,18 @@ class Postprocessor:
                             help='allow additional commands')
 
         parser.add_argument('--final-position', action=CoordinatesAction, default=GCODE_FINAL_POSITION,
-                            help='Position to reach at the end of work (i.e. "3.175, 4.702, 50.915")')
-
-        parser.add_argument('--machine', choices=BOUNDARIES.keys(), default=MACHINE,
-                            help='machine name (for boundary check)')
+                            help='Position to reach at the end of work (e.g. "3.175, 4.702, 50.915")')
 
         parser.add_argument('--boundaries-check', action='store_true', default=BOUNDARIES_CHECK,
                             help='check boundaries according to the machine build area')
         parser.add_argument('--no-boundaries-check', action='store_false', dest='boundaries_check',
                             help='disable boundaries check')
+
+        parser.add_argument('--boundaries', action=CoordinatesAction, default=None,
+                            help='Custom boundaries (e.g. "100, 200, 300"). Overrides --machine')
+
+        parser.add_argument('--machine', choices=BOUNDARIES.keys(), default=MACHINE,
+                            help='machine name (for boundary check)')
 
         self.conf = parser.parse_args(args=args)
 
@@ -512,6 +517,19 @@ class Postprocessor:
                 elif cmd.Name in ("G81", "G82", "G83") and self.conf.translate_drill_cycles is True:
                     self.translateDrill(cmd, obj)
 
+                # Tool change: add custom gcode or pause
+                elif cmd.Name in ("M6", "M06") and self.conf.tool_change:
+                    self.gcode.append(Comment(f'TOOL CHANGE'))
+
+                    # use custom gcode if provided
+                    if type(self.conf.tool_change) is str:
+                        for line in self.conf.tool_change.splitlines():
+                            self.gcode.append(line)
+
+                    # fallback to pause
+                    else:
+                        self.addCommand(self.conf.pause)
+
                 # Messages
                 elif cmd.Name == 'message':
                     self.gcode.append(Comment(f'message: {cmd}'))
@@ -534,30 +552,20 @@ class Postprocessor:
                 else:
                     self.addCommand("G4")
 
-            # Tool change: add custom gcode or pause
-            elif cmd.Name in ("M6", "M06") and self.conf.tool_change:
-                self.gcode.append(Comment(f'TOOL CHANGE'))
-
-                # use custom gcode if provided
-                if type(self.conf.tool_change) is str:
-                    for line in self.conf.tool_change.splitlines():
-                        self.gcode.append(line)
-
-                # fallback to pause
-                else:
-                    self.addCommand(self.conf.pause)
-
         return self.gcode
 
     def checkBoundaries(self) -> bool:
         """check boundaries and return whether it succeeded"""
         FreeCAD.Console.PrintLog('Boundaries check/n')
 
-        if self.conf.machine not in BOUNDARIES.keys():
-            FreeCAD.Console.PrintError(f'Boundary check failed, no valid machine name supplied')
-            return False
+        if self.conf.boundaries is None:
+            if self.conf.machine in BOUNDARIES.keys():
+                self.conf.boundaries = BOUNDARIES[self.conf.machine]
+            else:
+                FreeCAD.Console.PrintError(f'Boundary check failed, no valid machine name supplied')
+                return False
 
-        boundaries = dict(X=[0, 0], Y=[0, 0], Z=[0, 0])
+        extrema = dict(X=[0, 0], Y=[0, 0], Z=[0, 0])
         position = dict(X=0, Y=0, Z=0)
         relative = False
 
@@ -568,17 +576,17 @@ class Postprocessor:
                 elif cmd.Name == 'G91':
                     relative = False
                 elif cmd.Name in ('G0', 'G1'):
-                    for axis in boundaries.keys():
+                    for axis in extrema.keys():
                         if (value := cmd.Parameters.get(axis)) is not None:
                             if relative:
                                 position[axis] += value
                             else:
                                 position[axis] = value
-                            boundaries[axis][0] = max(boundaries[axis][0], position[axis])
-                            boundaries[axis][1] = min(boundaries[axis][1], position[axis])
+                            extrema[axis][0] = max(extrema[axis][0], position[axis])
+                            extrema[axis][1] = min(extrema[axis][1], position[axis])
 
-        for axis, limit in zip(boundaries.keys(), BOUNDARIES[self.conf.machine]):
-            if abs(boundaries[axis][0] - boundaries[axis][1]) > limit:
+        for axis in extrema.keys():
+            if abs(extrema[axis][0] - extrema[axis][1]) > self.conf.boundaries[axis]:
                 FreeCAD.Console.PrintWarning(f'Boundary check: job exceeds machine limit on {axis} axis\n')
 
     def export(self, objects, filename: str, argstring: str):
@@ -586,6 +594,9 @@ class Postprocessor:
 
         if argstring:
             self.configure(*shlex.split(argstring))
+            self.gcode = Gcode(configuration=self.conf)
+        else:
+            self.configure()
             self.gcode = Gcode(configuration=self.conf)
 
         for obj in objects:
@@ -671,7 +682,7 @@ class Postprocessor:
 
         # Final position
         if self.conf.final_position:
-            self.gcode.append(self.conf.final_position)
+            self.addCommand('G0', **self.conf.final_position)
 
         # Postamble gcode
         self.gcode.append(Comment('POSTAMBLE'))
@@ -704,4 +715,5 @@ def export(objects, filename: str, argstring: str):
 
 
 if __name__ == '__main__':
-    raise Warning('this module is not intended to be used standalone')
+    # raise Warning('this module is not intended to be used standalone')
+    Postprocessor().configure('--help')
