@@ -360,7 +360,7 @@ class Postprocessor:
         
         parser.add_argument('--show-editor', action='store_true', default=SHOW_EDITOR,
                             help='pop up editor before writing output')
-        parser.add_argument('--no-show-editor', action='store_false', dest='show_editor',
+        parser.add_argument('--hide-editor', action='store_false', dest='show_editor',
                             help='do not pop up editor before writing output')
 
         parser.add_argument('--precision', type=int, default=PRECISION, help='number of digits of precision')
