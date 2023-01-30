@@ -14,7 +14,7 @@ import PathScripts.PathUtil as PathUtil
 import PathScripts.PostUtils as PostUtils
 import PathScripts.PathJob as PathJob
 
-__version__ = '1.0.6'
+__version__ = '1.0.7'
 __author__ = 'clsergent'
 __license__ = 'EUPL1.2'
 
@@ -490,6 +490,19 @@ class Postprocessor:
                 elif cmd.Name in ("G81", "G82", "G83") and self.conf.translate_drill_cycles is True:
                     self.translateDrill(cmd, obj)
 
+                # Tool change: add custom gcode or pause
+                elif cmd.Name in ("M6", "M06") and self.conf.tool_change:
+                    self.gcode.append(Comment(f'TOOL CHANGE'))
+
+                    # use custom gcode if provided
+                    if type(self.conf.tool_change) is str:
+                        for line in self.conf.tool_change.splitlines():
+                            self.gcode.append(line)
+
+                    # fallback to pause
+                    else:
+                        self.addCommand(self.conf.pause)
+
                 # Messages
                 elif cmd.Name == 'message':
                     self.gcode.append(Comment(f'message: {cmd}'))
@@ -511,19 +524,6 @@ class Postprocessor:
                     self.addCommand("G4", S=int(self.conf.spindle_wait))
                 else:
                     self.addCommand("G4")
-
-            # Tool change: add custom gcode or pause
-            elif cmd.Name in ("M6", "M06") and self.conf.tool_change:
-                self.gcode.append(Comment(f'TOOL CHANGE'))
-
-                # use custom gcode if provided
-                if type(self.conf.tool_change) is str:
-                    for line in self.conf.tool_change.splitlines():
-                        self.gcode.append(line)
-
-                # fallback to pause
-                else:
-                    self.addCommand(self.conf.pause)
 
         return self.gcode
 
