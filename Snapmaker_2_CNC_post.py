@@ -1,3 +1,4 @@
+#!python3
 # A FreeCAD postprocessor for the Snapmaker 2.0 CNC function
 
 import os
@@ -38,7 +39,7 @@ PAUSE = "M76"  # pause command
 REMOVE_DUPLICATES = True  # True: Commands are suppressed if they are the same as the previous line
 LINE_START = 1  # Line number starting value
 LINE_INCREMENT = 1  # Line number increment
-BOUNDARIES_CHECK = True
+BOUNDARIES_CHECK = False
 
 # File options
 INCLUDE_HEADER = True  # Output header in output gcode file
@@ -99,7 +100,7 @@ def getSelectedJob() -> PathJob.ObjectJob:
     return None
 
 
-def getJob(obj) -> PathJob.ObjectJob:
+def getJob(obj) -> 'PathJob.ObjectJob':
     """return the parent job of the provided object"""
     try:
         return obj.Proxy.getJob(obj)
@@ -556,7 +557,7 @@ class Postprocessor:
 
     def checkBoundaries(self) -> bool:
         """check boundaries and return whether it succeeded"""
-        FreeCAD.Console.PrintLog('Boundaries check/n')
+        FreeCAD.Console.PrintLog('Boundaries check\n')
 
         if self.conf.boundaries is None:
             if self.conf.machine in BOUNDARIES.keys():
