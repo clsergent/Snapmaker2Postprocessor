@@ -18,6 +18,80 @@ Check the [wiki](https://github.com/clsergent/Snapmaker2Postprocessor/wiki) if y
 
 Refer to [FreeCAD documentation](https://wiki.freecadweb.org/Path_Post) on how to use a postprocessor.
 
+## Options
+This postprocessor has many options, including boundary checking with presets for different models, default units, thumbnail generation and exceptions for drilling to name a few. You can see the help locally by running it as a macro using the ``--help`` option.
+
+The output looks like this:
+
+```
+usage: Snapmaker_2_CNC_post [-h] [--header] [--no-header] [--comments] [--no-comments]
+                            [--comment-symbols COMMENT_SYMBOLS COMMENT_SYMBOLS] [--thumbnail] [--no-thumbnail] [--line-numbers]
+                            [--no-line-numbers] [--line-start LINE_START] [--line-increment LINE_INCREMENT] [--remove-duplicates]
+                            [--keep-duplicates] [--show-editor] [--hide-editor] [--precision PRECISION] [--pause {M25,M76}]
+                            [--units {mm,in}] [--preamble PREAMBLE] [--postamble POSTAMBLE] [--pre-operation PRE_OPERATION]
+                            [--post-operation POST_OPERATION] [--translate-drill-cycles] [--no-translate-drill-cycles]
+                            [--tool-change [TOOL_CHANGE]] [--no-tool-change] [--tool-number] [--no-tool-number]
+                            [--spindle-wait SPINDLE_WAIT] [--spacer SPACER] [--commands COMMANDS [COMMANDS ...]]
+                            [--final-position FINAL_POSITION] [--boundaries-check] [--no-boundaries-check] [--boundaries BOUNDARIES]
+                            [--machine {original,original_z_extension,A150,A250,A250T,A350,A350T,artisan}]
+
+Snapmaker 2.0 CNC postprocessor for FreeCAD
+
+options:
+  -h, --help            show this help message and exit
+  --header              include header
+  --no-header           remove header
+  --comments            include comments
+  --no-comments         remove comments
+  --comment-symbols COMMENT_SYMBOLS COMMENT_SYMBOLS
+                        comment symbols
+  --thumbnail           include a thumbnail (require --header
+  --no-thumbnail        remove thumbnail
+  --line-numbers        prefix with line numbers
+  --no-line-numbers     do not prefix with line numbers
+  --line-start LINE_START
+                        first line number
+  --line-increment LINE_INCREMENT
+                        line number increment
+  --remove-duplicates   remove duplicate lines
+  --keep-duplicates     keep duplicate lines
+  --show-editor         pop up editor before writing output
+  --hide-editor         do not pop up editor before writing output
+  --precision PRECISION
+                        number of digits of precision
+  --pause {M25,M76}     pause command to use
+  --units {mm,in}       unit in use
+  --preamble PREAMBLE   commands to be issued before the first command
+  --postamble POSTAMBLE
+                        commands to be issued after the last command
+  --pre-operation PRE_OPERATION
+                        commands to be issued before each operation
+  --post-operation POST_OPERATION
+                        commands to be issued after each operation
+  --translate-drill-cycles
+                        convert drill cycles (G81, G82, and G83)
+  --no-translate-drill-cycles
+                        ignore drill cycles (G81, G82, and G83)
+  --tool-change [TOOL_CHANGE]
+                        insert tool change gcode (optional gcode may be provided)
+  --no-tool-change      remove tool change gcode
+  --tool-number         insert tool number gcode TXX (unsupported by Snapmaker but may be used for simulation)
+  --no-tool-number      remove tool number gcode
+  --spindle-wait SPINDLE_WAIT
+                        wait for spindle to reach desired speed after M3 or M4
+  --spacer SPACER       space character(s) in use
+  --commands COMMANDS [COMMANDS ...]
+                        allow additional commands
+  --final-position FINAL_POSITION
+                        Position to reach at the end of work (e.g. "3.175, 4.702, 50.915")
+  --boundaries-check    check boundaries according to the machine build area
+  --no-boundaries-check
+                        disable boundaries check
+  --boundaries BOUNDARIES
+                        Custom boundaries (e.g. "100, 200, 300"). Overrides --machine
+  --machine {original,original_z_extension,A150,A250,A250T,A350,A350T,artisan}
+                        machine name (for boundary check)
+```
 
 ## Limitations
 This postprocessor has been tested on FreeCAD 0.20 shipped with python3.10.
