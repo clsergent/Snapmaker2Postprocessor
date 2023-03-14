@@ -57,7 +57,7 @@ BOUNDARIES = dict(original=dict(X=90, Y=90, Z=50),
                   **dict.fromkeys(('A150',), dict(X=160, Y=160, Z=90)),
                   **dict.fromkeys(('A250', 'A250T'), dict(X=230, Y=250, Z=180)),
                   **dict.fromkeys(('A350', 'A350T'), dict(X=320, Y=350, Z=275)),
-                  **dict.fromkeys(('artisan'), dict(X=400, Y=400, Z=400)),
+                  **dict.fromkeys(('artisan',), dict(X=400, Y=400, Z=400)),
                   )
 
 # FreeCAD GUI options
