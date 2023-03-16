@@ -51,11 +51,13 @@ INCLUDE_TOOL_NUMBER = False  # include tool number change (TXX), unsupported by 
 # Machine options
 # https://snapmaker.com/snapmaker-original/specs
 # https://snapmaker.com/snapmaker-2/specs
+# https://snapmaker.com/snapmaker-artisan/specs
 BOUNDARIES = dict(original=dict(X=90, Y=90, Z=50),
                   original_z_extension=dict(X=90, Y=90, Z=146),
                   **dict.fromkeys(('A150',), dict(X=160, Y=160, Z=90)),
                   **dict.fromkeys(('A250', 'A250T'), dict(X=230, Y=250, Z=180)),
                   **dict.fromkeys(('A350', 'A350T'), dict(X=320, Y=350, Z=275)),
+                  **dict.fromkeys(('artisan',), dict(X=400, Y=400, Z=400)),
                   )
 
 # FreeCAD GUI options
