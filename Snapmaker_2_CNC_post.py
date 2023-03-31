@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # A FreeCAD postprocessor for the Snapmaker 2.0 CNC function
 
 import os
