@@ -1,22 +1,30 @@
-#!python3
+#!/usr/bin/env python3
 # A FreeCAD postprocessor for the Snapmaker 2.0 CNC function
 
 import os
 import re
 import argparse
 import shlex
-import timeit
 from datetime import datetime
 import base64
 import tempfile
 
-import FreeCAD
-import Path
-import PathScripts.PathUtil as PathUtil
-import PathScripts.PostUtils as PostUtils
-import PathScripts.PathJob as PathJob
+try:
+    import FreeCAD
+    import Path
+    import PathScripts.PathUtil as PathUtil
+    import PathScripts.PostUtils as PostUtils
+    import PathScripts.PathJob as PathJob
+except ImportError:
+    print('FreeCAD modules could not be imported. Only help is available')
+    FreeCAD = None
+    Path = None
+    PathUtil = None
+    PostUtils = None
+    PathJob = None
 
-__version__ = '1.0.6'
+
+__version__ = '1.1.0'
 __author__ = 'clsergent'
 __license__ = 'EUPL1.2'
 
@@ -83,7 +91,7 @@ GCODE_SPACER = " "
 TOOLTIP = 'Snapmaker 2.0 CNC postprocessor for FreeCAD'
 
 
-def getSelectedJob() -> PathJob.ObjectJob:
+def getSelectedJob() -> 'PathJob.ObjectJob':
     """return the selected job"""
     # job can be retrieved using selection or through PathScripts.PathJob.Instances()
     if FreeCAD.GuiUp:
@@ -139,6 +147,7 @@ def getThumbnail(job) -> str:
 
         return f'thumbnail: data:image/png;base64,{base64.b64encode(data).decode()}'
     else:
+        FreeCAD.Console.PrintWarning('GUI is not up, no thumbnail will be generated\n')
         return ''
 
 
@@ -190,11 +199,11 @@ class Command:
             self._cmd = name
         else:
             self._cmd = Path.Command(name, parameters)
-    
+
     @property
     def Name(self) -> str:
         return self._cmd.Name
-    
+
     @property
     def Parameters(self) -> dict:
         return self._cmd.Parameters
@@ -327,7 +336,9 @@ class Postprocessor:
         self.gcode = None
         self.conf = None
         self.job = None
-    
+
+
+
     def configure(self, *args):
         """set postprocessor values"""
         parser = argparse.ArgumentParser(prog='Snapmaker_2_CNC_post',
@@ -342,7 +353,7 @@ class Postprocessor:
                             help='comment symbols')
 
         parser.add_argument('--thumbnail', action='store_true', default=INCLUDE_THUMBNAIL,
-                            help='include a thumbnail (require --header')
+                            help='include a thumbnail (require --header)')
         parser.add_argument('--no-thumbnail', action='store_false', dest='thumbnail',
                             help='remove thumbnail')
 
@@ -355,12 +366,12 @@ class Postprocessor:
                             help='first line number')
         parser.add_argument('--line-increment', type=int, default=LINE_INCREMENT,
                             help='line number increment')
-        
+
         parser.add_argument('--remove-duplicates', action='store_true', default=REMOVE_DUPLICATES,
                             help='remove duplicate lines')
         parser.add_argument('--keep-duplicates', action='store_false', dest='remove_duplicates',
                             help='keep duplicate lines')
-        
+
         parser.add_argument('--show-editor', action='store_true', default=SHOW_EDITOR,
                             help='pop up editor before writing output')
         parser.add_argument('--hide-editor', action='store_false', dest='show_editor',
@@ -371,15 +382,15 @@ class Postprocessor:
         parser.add_argument('--pause', choices=GCODE_PAUSE, default=PAUSE, help=f'pause command to use')
 
         parser.add_argument('--units', choices=GCODE_UNITS.keys(), default=UNITS, help='unit in use')
-        
+
         parser.add_argument('--preamble', default=GCODE_PREAMBLE, help='commands to be issued before the first command')
         parser.add_argument('--postamble', default=GCODE_POSTAMBLE, help='commands to be issued after the last command')
-        
+
         parser.add_argument('--pre-operation', default=GCODE_PRE_OPERATION,
                             help='commands to be issued before each operation')
         parser.add_argument('--post-operation', default=GCODE_POST_OPERATION,
                             help='commands to be issued after each operation')
-        
+
         parser.add_argument('--translate-drill-cycles', action='store_true', default=TRANSLATE_DRILL_CYCLES,
                             help='convert drill cycles (G81, G82, and G83)')
         parser.add_argument('--no-translate-drill-cycles', action='store_false', dest='translate_drill_cycle',
@@ -395,9 +406,9 @@ class Postprocessor:
 
         parser.add_argument('--spindle-wait', type=int, default=SPINDLE_WAIT,
                             help='wait for spindle to reach desired speed after M3 or M4')
-        
+
         parser.add_argument('--spacer', type=str, default=GCODE_SPACER, help='space character(s) in use')
-        
+
         parser.add_argument('--commands', action='extend', nargs='+', default=GCODE_COMMANDS,
                             help='allow additional commands')
 
@@ -559,13 +570,15 @@ class Postprocessor:
 
     def checkBoundaries(self) -> bool:
         """check boundaries and return whether it succeeded"""
+        status = True
         FreeCAD.Console.PrintLog('Boundaries check\n')
 
         if self.conf.boundaries is None:
             if self.conf.machine in BOUNDARIES.keys():
                 self.conf.boundaries = BOUNDARIES[self.conf.machine]
             else:
-                FreeCAD.Console.PrintError(f'Boundary check failed, no valid machine name supplied')
+                self.gcode.insert(0, 'ERROR: Boundary check failed: no valid machine name supplied')
+                FreeCAD.Console.PrintError('Boundary check failed: no valid machine name supplied\n')
                 return False
 
         extrema = dict(X=[0, 0], Y=[0, 0], Z=[0, 0])
@@ -590,10 +603,15 @@ class Postprocessor:
 
         for axis in extrema.keys():
             if abs(extrema[axis][0] - extrema[axis][1]) > self.conf.boundaries[axis]:
+                self.gcode.insert(0, f'WARNING: Boundary check: job exceeds machine limit on {axis} axis')
                 FreeCAD.Console.PrintWarning(f'Boundary check: job exceeds machine limit on {axis} axis\n')
+                status = False
+
+        return status
 
     def export(self, objects, filename: str, argstring: str):
-        FreeCAD.Console.PrintMessage(f'Post Processor: {__name__}\nPostprocessing...\n')
+        FreeCAD.Console.PrintMessage(f'Post Processor: {__name__}\n')
+        FreeCAD.Console.PrintMessage(f'Postprocessing...\n')
 
         if argstring:
             self.configure(*shlex.split(argstring))
@@ -619,12 +637,12 @@ class Postprocessor:
         if self.conf.thumbnail and (thumbnail := getThumbnail(self.job)):
             self.gcode.append(Header(thumbnail))
         self.gcode.append(Header('Header End'))
-        
+
         # Preamble gcode
         self.gcode.append(Comment('PREAMBLE'))
         for line in self.conf.preamble.splitlines():
             self.gcode.append(line)
-        
+
         # Configuration (after preamble to avoid overwriting)
         self.gcode.append(Comment('CONFIGURATION'))
         self.addCommand(GCODE_MOTION_MODE)
@@ -637,7 +655,7 @@ class Postprocessor:
             if not hasattr(obj, 'Path'):
                 FreeCAD.Console.PrintWarning(f'Object {obj.Name} is not a valid Path. Please select only Paths and Compounds\n')
                 continue
-            
+
             # Skip inactive objects
             if PathUtil.opProperty(obj, "Active") is False:
                 FreeCAD.Console.PrintWarning(f'Object {obj.Name} is inactive and will be skipped\n')
@@ -657,7 +675,7 @@ class Postprocessor:
             self.gcode.append(Comment(f'OPERATION: {obj.Label}'))
             for line in self.conf.pre_operation.splitlines():
                 self.gcode.append(line)
-            
+
             # Coolant on
             if hasattr(obj, 'CoolantMode'):
                 coolantMode = obj.CoolantMode
@@ -665,19 +683,19 @@ class Postprocessor:
                 coolantMode = obj.Base.CoolantMode
             else:
                 coolantMode = 'None'    # None is the default value returned by the obj
-            
+
             if coolantMode != 'None':
                 self.gcode.append(Comment(f'COOLANT ON: {coolantMode}'))
                 self.addCommand(GCODE_COOLANT[coolantMode.lower()])
-            
+
             # Object commands
             self.parseObject(obj)
-            
+
             # Post operation gcode
             self.gcode.append(Comment(f'END OF OPERATION: {obj.Label}'))
             for line in self.conf.post_operation.splitlines():
                 self.gcode.append(line)
-            
+
             # Coolant Off
             if coolantMode != 'None':
                 self.gcode.append(Comment(f'COOLANT OFF: {coolantMode}'))
@@ -691,25 +709,25 @@ class Postprocessor:
         self.gcode.append(Comment('POSTAMBLE'))
         for line in self.conf.postamble.splitlines():
             self.gcode.append(line)
-        
+
         FreeCAD.Console.PrintMessage(f'Postprocessing done\n')
 
         # boundaries check
         if self.conf.boundaries_check:
-            self.checkBoundaries()
+            if self.checkBoundaries():
+                FreeCAD.Console.PrintLog('Boundary check passed. Be cautious, it is still an experimental feature.')
+            else:
+                FreeCAD.Console.PrintWarning('Boundary check failed, check logs for extra information.')
 
         # Show editor
-        data = str(self.gcode)
+        text = str(self.gcode)
         if FreeCAD.GuiUp and self.conf.show_editor:
             dialog = PostUtils.GCodeEditorDialog()
-            dialog.editor.setText(data)
-            result = dialog.exec_()
-            if result:
-                data = dialog.editor.toPlainText()
-        
-        # Export to file
-        with open(filename, 'w') as file:
-            file.write(data)
+            dialog.editor.setText(text)
+
+            if dialog.exec_():   # Export to file if OK is pressed
+                with open(filename, 'w') as file:
+                    file.write(dialog.editor.toPlainText())
 
 
 def export(objects, filename: str, argstring: str):
