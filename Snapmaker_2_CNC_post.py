@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # A FreeCAD postprocessor for the Snapmaker 2.0 CNC function
 
 import os
@@ -199,11 +198,11 @@ class Command:
             self._cmd = name
         else:
             self._cmd = Path.Command(name, parameters)
-
+    
     @property
     def Name(self) -> str:
         return self._cmd.Name
-
+    
     @property
     def Parameters(self) -> dict:
         return self._cmd.Parameters
@@ -331,14 +330,10 @@ class CoordinatesAction(argparse.Action):
 
 class Postprocessor:
     def __init__(self):
-        # self.configure()
-        # self.gcode = Gcode(configuration=self.conf)
         self.gcode = None
         self.conf = None
         self.job = None
-
-
-
+    
     def configure(self, *args):
         """set postprocessor values"""
         parser = argparse.ArgumentParser(prog='Snapmaker_2_CNC_post',
@@ -366,12 +361,12 @@ class Postprocessor:
                             help='first line number')
         parser.add_argument('--line-increment', type=int, default=LINE_INCREMENT,
                             help='line number increment')
-
+        
         parser.add_argument('--remove-duplicates', action='store_true', default=REMOVE_DUPLICATES,
                             help='remove duplicate lines')
         parser.add_argument('--keep-duplicates', action='store_false', dest='remove_duplicates',
                             help='keep duplicate lines')
-
+        
         parser.add_argument('--show-editor', action='store_true', default=SHOW_EDITOR,
                             help='pop up editor before writing output')
         parser.add_argument('--hide-editor', action='store_false', dest='show_editor',
@@ -382,15 +377,15 @@ class Postprocessor:
         parser.add_argument('--pause', choices=GCODE_PAUSE, default=PAUSE, help=f'pause command to use')
 
         parser.add_argument('--units', choices=GCODE_UNITS.keys(), default=UNITS, help='unit in use')
-
+        
         parser.add_argument('--preamble', default=GCODE_PREAMBLE, help='commands to be issued before the first command')
         parser.add_argument('--postamble', default=GCODE_POSTAMBLE, help='commands to be issued after the last command')
-
+        
         parser.add_argument('--pre-operation', default=GCODE_PRE_OPERATION,
                             help='commands to be issued before each operation')
         parser.add_argument('--post-operation', default=GCODE_POST_OPERATION,
                             help='commands to be issued after each operation')
-
+        
         parser.add_argument('--translate-drill-cycles', action='store_true', default=TRANSLATE_DRILL_CYCLES,
                             help='convert drill cycles (G81, G82, and G83)')
         parser.add_argument('--no-translate-drill-cycles', action='store_false', dest='translate_drill_cycle',
@@ -406,9 +401,9 @@ class Postprocessor:
 
         parser.add_argument('--spindle-wait', type=int, default=SPINDLE_WAIT,
                             help='wait for spindle to reach desired speed after M3 or M4')
-
+        
         parser.add_argument('--spacer', type=str, default=GCODE_SPACER, help='space character(s) in use')
-
+        
         parser.add_argument('--commands', action='extend', nargs='+', default=GCODE_COMMANDS,
                             help='allow additional commands')
 
@@ -637,12 +632,12 @@ class Postprocessor:
         if self.conf.thumbnail and (thumbnail := getThumbnail(self.job)):
             self.gcode.append(Header(thumbnail))
         self.gcode.append(Header('Header End'))
-
+        
         # Preamble gcode
         self.gcode.append(Comment('PREAMBLE'))
         for line in self.conf.preamble.splitlines():
             self.gcode.append(line)
-
+        
         # Configuration (after preamble to avoid overwriting)
         self.gcode.append(Comment('CONFIGURATION'))
         self.addCommand(GCODE_MOTION_MODE)
@@ -655,7 +650,7 @@ class Postprocessor:
             if not hasattr(obj, 'Path'):
                 FreeCAD.Console.PrintWarning(f'Object {obj.Name} is not a valid Path. Please select only Paths and Compounds\n')
                 continue
-
+            
             # Skip inactive objects
             if PathUtil.opProperty(obj, "Active") is False:
                 FreeCAD.Console.PrintWarning(f'Object {obj.Name} is inactive and will be skipped\n')
@@ -675,7 +670,7 @@ class Postprocessor:
             self.gcode.append(Comment(f'OPERATION: {obj.Label}'))
             for line in self.conf.pre_operation.splitlines():
                 self.gcode.append(line)
-
+            
             # Coolant on
             if hasattr(obj, 'CoolantMode'):
                 coolantMode = obj.CoolantMode
@@ -683,19 +678,19 @@ class Postprocessor:
                 coolantMode = obj.Base.CoolantMode
             else:
                 coolantMode = 'None'    # None is the default value returned by the obj
-
+            
             if coolantMode != 'None':
                 self.gcode.append(Comment(f'COOLANT ON: {coolantMode}'))
                 self.addCommand(GCODE_COOLANT[coolantMode.lower()])
-
+            
             # Object commands
             self.parseObject(obj)
-
+            
             # Post operation gcode
             self.gcode.append(Comment(f'END OF OPERATION: {obj.Label}'))
             for line in self.conf.post_operation.splitlines():
                 self.gcode.append(line)
-
+            
             # Coolant Off
             if coolantMode != 'None':
                 self.gcode.append(Comment(f'COOLANT OFF: {coolantMode}'))
@@ -703,13 +698,13 @@ class Postprocessor:
 
         # Final position
         if self.conf.final_position:
-            self.addCommand('G0', **self.conf.final_position)
+            self.gcode.append(self.conf.final_position)
 
         # Postamble gcode
         self.gcode.append(Comment('POSTAMBLE'))
         for line in self.conf.postamble.splitlines():
             self.gcode.append(line)
-
+        
         FreeCAD.Console.PrintMessage(f'Postprocessing done\n')
 
         # boundaries check
@@ -736,5 +731,4 @@ def export(objects, filename: str, argstring: str):
 
 
 if __name__ == '__main__':
-    # raise Warning('this module is not intended to be used standalone')
     Postprocessor().configure('--help')
