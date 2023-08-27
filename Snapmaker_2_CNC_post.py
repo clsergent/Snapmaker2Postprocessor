@@ -12,9 +12,14 @@ import tempfile
 try:
     import FreeCAD
     import Path
-    import PathScripts.PathUtil as PathUtil
-    import PathScripts.PostUtils as PostUtils
-    import PathScripts.PathJob as PathJob
+    if int(FreeCAD.Version()[1]) < 21:
+        import PathScripts.PathUtil as PathUtil
+        import PathScripts.PostUtils as PostUtils
+        import PathScripts.PathJob as PathJob
+    else:
+        import Path.Base.Util as PathUtil
+        import Path.Post.Utils as PostUtils
+        import Path.Main.Job as PathJob
 except ImportError:
     print('FreeCAD modules could not be imported. Only help is available')
     FreeCAD = None
@@ -605,7 +610,7 @@ class Postprocessor:
 
         return status
 
-    def export(self, objects, filename: str, argstring: str):
+    def export(self, objects, filename: str, argstring: str) -> str:
         FreeCAD.Console.PrintMessage(f'Post Processor: {__name__}\n')
         FreeCAD.Console.PrintMessage(f'Postprocessing...\n')
 
@@ -724,11 +729,12 @@ class Postprocessor:
             if dialog.exec_():   # Export to file if OK is pressed
                 with open(filename, 'w') as file:
                     file.write(dialog.editor.toPlainText())
+        return text
 
 
 def export(objects, filename: str, argstring: str):
     post = Postprocessor()
-    post.export(objects, filename, argstring)
+    return post.export(objects, filename, argstring)
 
 
 if __name__ == '__main__':
