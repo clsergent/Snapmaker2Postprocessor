@@ -20,8 +20,8 @@ Refer to [FreeCAD documentation](https://wiki.freecadweb.org/Path_Post) on how t
 
 
 ## Limitations
-This postprocessor has been tested on FreeCAD 0.20 shipped with python3.10.
-Generated GCODE has only been tested on a Snapmaker 2 A350. It *should* work on any other Snapmaker 2.0 (A150, A250, A250T, A350T), and *may* work on other Snapamker machines, but with no warranty.
+This postprocessor has been tested on FreeCAD 0.20 and 0.21 shipped with python3.10.
+Generated GCODE has only been tested on a Snapmaker 2 A350 and A250. It *should* work on any other Snapmaker 2.0 (A150, A250, A250T, A350T), and *may* work on other Snapamker machines, but with no warranty.
 If you encounter any bug, please open an issue. 
 
 
