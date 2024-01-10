@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 # A FreeCAD postprocessor for the Snapmaker 2.0 CNC function
 
+import argparse
+import base64
 import os
 import re
-import argparse
 import shlex
-from datetime import datetime
-import base64
 import tempfile
+from datetime import datetime
 
 try:
     import FreeCAD
     import Path
     if int(FreeCAD.Version()[1]) < 21:
+        import PathScripts.PathJob as PathJob
         import PathScripts.PathUtil as PathUtil
         import PathScripts.PostUtils as PostUtils
-        import PathScripts.PathJob as PathJob
     else:
         import Path.Base.Util as PathUtil
-        import Path.Post.Utils as PostUtils
         import Path.Main.Job as PathJob
+        import Path.Post.Utils as PostUtils
 except ImportError:
     print('FreeCAD modules could not be imported. Only help is available')
     FreeCAD = None
@@ -96,25 +96,6 @@ GCODE_SPACER = " "
 TOOLTIP = 'Snapmaker 2.0 CNC postprocessor for FreeCAD'
 
 
-def getSelectedJob() -> 'PathJob.ObjectJob':
-    """return the selected job"""
-    # job can be retrieved using selection or through PathScripts.PathJob.Instances()
-    if FreeCAD.GuiUp:
-        import FreeCADGui
-        jobs = []
-        for selection in FreeCADGui.Selection.getSelection():
-            if hasattr(selection, "Proxy") and isinstance(selection.Proxy, PathJob.ObjectJob):
-                jobs.append(selection)
-
-        if len(jobs) > 0:
-            if len(jobs) > 1:
-                FreeCAD.Console.PrintWarning('Only one job should be selected, using the first one\n')
-            return jobs[0]
-    else:  # TODO: get job from document if GUI not up
-        FreeCAD.Console.PrintError('No job can be found by selection without GUI\n')
-    return None
-
-
 def getJob(obj) -> 'PathJob.ObjectJob':
     """return the parent job of the provided object"""
     try:
@@ -122,38 +103,6 @@ def getJob(obj) -> 'PathJob.ObjectJob':
     except AttributeError:
         FreeCAD.Console.PrintLog(f'No parent job was found for {obj}\n')
         return None
-
-
-def getThumbnail(job) -> str:
-    """generate a thumbnail of the job"""
-    if FreeCAD.GuiUp:
-        import FreeCADGui
-        selection = FreeCADGui.Selection.getCompleteSelection()
-        FreeCADGui.Selection.clearSelection()
-
-        # select models to display
-        for model in job.Model.Group:
-            model.ViewObject.show()
-            FreeCADGui.Selection.addSelection(model.Document.Name, model.Name)
-        FreeCADGui.runCommand('Std_ViewFitSelection', 0)  # center selection
-        FreeCADGui.activeDocument().activeView().viewIsometric()  # display as isometric
-        FreeCADGui.Selection.clearSelection()
-
-        for obj in selection:  # restore selection
-            if hasattr(obj, 'Object'):
-                obj = obj.Object
-            FreeCADGui.Selection.addSelection(obj.Document.Name, obj.Name)
-
-        with tempfile.TemporaryDirectory() as temp:
-            path = os.path.join(temp, 'thumbnail.png')
-            FreeCADGui.activeDocument().activeView().saveImage(path, 720, 480, 'Transparent')
-            with open(path, 'rb') as file:
-                data = file.read()
-
-        return f'thumbnail: data:image/png;base64,{base64.b64encode(data).decode()}'
-    else:
-        FreeCAD.Console.PrintWarning('GUI is not up, no thumbnail will be generated\n')
-        return ''
 
 
 def convertPosition(position: float, units=UNITS) -> float:
@@ -625,8 +574,6 @@ class Postprocessor:
             if job := getJob(obj):
                 self.job = job
                 break
-        if self.job is None:
-            self.job = getSelectedJob()
 
         if self.job is None:
             FreeCAD.Console.PrintError(f'no job was found, please select a job before calling the postprocessor\n')
@@ -635,8 +582,6 @@ class Postprocessor:
         self.gcode.append(Header('Exported by FreeCAD'))
         self.gcode.append(Header(f'Postprocessor: {__name__}'))
         self.gcode.append(Header(f'Output Time: {datetime.now()}'))
-        if self.conf.thumbnail and (thumbnail := getThumbnail(self.job)):
-            self.gcode.append(Header(thumbnail))
         self.gcode.append(Header('Header End'))
         
         # Preamble gcode
