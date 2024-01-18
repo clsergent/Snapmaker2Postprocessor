@@ -8,6 +8,7 @@ import shlex
 from datetime import datetime
 import base64
 import tempfile
+from typing import Union
 
 try:
     import FreeCAD
@@ -213,7 +214,7 @@ class Command:
     def Parameters(self) -> dict:
         return self._cmd.Parameters
 
-    def addParameter(self, parameter, value: str | int | float = ''):
+    def addParameter(self, parameter, value: Union[str, int, float] = ''):
         """add a parameter to the command"""
         self._cmd.setFromGCode(f'{self._cmd.toGCode()} {parameter}{value}')
 
