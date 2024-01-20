@@ -598,7 +598,7 @@ class Postprocessor:
                 if cmd.Name == 'G90':
                     relative = False
                 elif cmd.Name == 'G91':
-                    relative = False
+                    relative = True
                 elif cmd.Name in ('G0', 'G1'):
                     for axis in extrema.keys():
                         if (value := cmd.Parameters.get(axis)) is not None:
