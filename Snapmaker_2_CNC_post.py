@@ -76,6 +76,7 @@ BOUNDARIES = dict(original=dict(X=90, Y=90, Z=50),
 
 # FreeCAD GUI options
 SHOW_EDITOR = True  # Display the resulting gcode file
+ALLOW_GUI = True  # Allow to call GUI methods
 
 # GCODE optional commands
 GCODE_PREAMBLE = ""  # Text inserted at the beginning of the gcode output file.
@@ -379,6 +380,11 @@ class Postprocessor:
         parser.add_argument('--hide-editor', action='store_false', dest='show_editor',
                             help='do not pop up editor before writing output')
 
+        parser.add_argument('--gui', action='store_true', default=ALLOW_GUI,
+                            help='allow the postprocessor to execute GUI methods')
+        parser.add_argument('--no-gui', action='store_false', dest='gui',
+                            help='execute postprocessor without requiring GUI')
+
         parser.add_argument('--precision', type=int, default=PRECISION, help='number of digits of precision')
 
         parser.add_argument('--pause', choices=GCODE_PAUSE, default=PAUSE, help=f'pause command to use')
@@ -626,18 +632,23 @@ class Postprocessor:
             if job := getJob(obj):
                 self.job = job
                 break
-        if self.job is None:
+        if self.job is None and self.conf.gui is True:
             self.job = getSelectedJob()
 
         if self.job is None:
-            FreeCAD.Console.PrintError(f'no job was found, please select a job before calling the postprocessor\n')
+            FreeCAD.Console.PrintError(f'No job was found, please select a job before calling the postprocessor\n')
 
         self.gcode.append(Header('Header Start'))
         self.gcode.append(Header('Exported by FreeCAD'))
         self.gcode.append(Header(f'Postprocessor: {__name__}'))
         self.gcode.append(Header(f'Output Time: {datetime.now()}'))
-        if self.conf.thumbnail and (thumbnail := getThumbnail(self.job)):
-            self.gcode.append(Header(thumbnail))
+        if self.conf.thumbnail is True:
+            if self.conf.gui is not True:
+                FreeCAD.Console.PrintWarning(f'Thumbnail not generated: GUI access is disabled. Consider adding --gui argument\n')
+            elif thumbnail := getThumbnail(self.job):
+                self.gcode.append(Header(thumbnail))
+            else:
+                FreeCAD.Console.PrintWarning('Failed to generate thumbnail.\n')
         self.gcode.append(Header('Header End'))
         
         # Preamble gcode
