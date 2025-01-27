@@ -13,7 +13,7 @@ from typing import Union
 try:
     import FreeCAD
     import Path
-    if int(FreeCAD.Version()[1]) < 21:
+    if int(FreeCAD.Version()[0]) < 1 and int(FreeCAD.Version()[1]) < 21:
         import PathScripts.PathUtil as PathUtil
         import PathScripts.PostUtils as PostUtils
         import PathScripts.PathJob as PathJob
