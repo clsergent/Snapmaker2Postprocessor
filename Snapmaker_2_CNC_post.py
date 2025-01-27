@@ -617,7 +617,8 @@ class Postprocessor:
 
         return status
 
-    def export(self, objects, filename: str, argstring: str) -> str:
+    def export(self, objects, filename: str, argstring: str, *args) -> str:
+        FreeCAD.Console.PrintMessage(f'filename: {filename}\tagstring: {argstring}\t{args}\n')
         FreeCAD.Console.PrintMessage(f'Post Processor: {__name__}\n')
         FreeCAD.Console.PrintMessage(f'Postprocessing...\n')
 
@@ -738,9 +739,11 @@ class Postprocessor:
             dialog = PostUtils.GCodeEditorDialog()
             dialog.editor.setText(text)
 
-            if dialog.exec_():   # Export to file if OK is pressed
-                with open(filename, 'w') as file:
-                    file.write(dialog.editor.toPlainText())
+            if dialog.exec_():   # Update text and export to file if OK is pressed
+                text = dialog.editor.toPlainText()
+                if filename != '-':  # handle issue #16 where filename is '-' no matter PostProcessorOutputFile value
+                    with open(filename, 'w') as file:
+                        file.write(text)
         return text
 
 
