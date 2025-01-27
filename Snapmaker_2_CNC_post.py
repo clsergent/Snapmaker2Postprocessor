@@ -640,6 +640,8 @@ class Postprocessor:
             FreeCAD.Console.PrintError(f'No job was found, please select a job before calling the postprocessor\n')
 
         self.gcode.append(Header('Header Start'))
+        self.gcode.append(Header('header_type: cnc'))
+        self.gcode.append(Header('gcode_flavor: marlin'))
         self.gcode.append(Header('Exported by FreeCAD'))
         self.gcode.append(Header(f'Postprocessor: {__name__}'))
         self.gcode.append(Header(f'Output Time: {datetime.now()}'))
