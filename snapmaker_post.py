@@ -40,6 +40,7 @@ SNAPMAKER_MACHINES = dict(
     artisan=dict(name='Snapmaker Artisan', X=400, Y=400, Z=400)
 )
 
+SNAPMAKER_TOOLHEADS = ('50W', '200W')
 
 class CoordinatesAction(argparse.Action):
     """argparse Action to handle coordinates x,y,z"""
@@ -108,11 +109,13 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         self.values["SPINDLE_WAIT"] = 4.0
         self.values["TOOL_CHANGE"] = "M76"  # handle tool change by inserting an HMI pause
         self.values["TRANSLATE_DRILL_CYCLES"] = True  # drill cycle gcode must be translated
-        self.values["USE_TLO"] = False  # TODO: G43 is not handled
+        self.values["USE_TLO"] = False  # G43 is not handled. TODO: check that nothing has to be added
 
         # snapmaker values
         self.values["THUMBNAIL"] = True
         self.values["MACHINES"] = SNAPMAKER_MACHINES
+        self.values["TOOLHEADS"] = SNAPMAKER_TOOLHEADS
+        self.values["TOOLHEAD_NAME"] = None
         self.values["BOUNDARIES"] = dict(X=-1, Y=-1, Z=-1)
 
     def init_argument_defaults(self) -> None:
@@ -144,6 +147,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         self.arguments_visible["gui"] = True
         self.arguments_visible["boundaries-check"] = True
         self.arguments_visible["machine"] = True
+        self.arguments_visible["toolhead"] = True
 
     def init_parser(self, values, argument_defaults, arguments_visible) -> argparse.ArgumentParser:
         """Initialize the postprocessor arguments parser"""
@@ -173,6 +177,9 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         group.add_argument('--machine', default=None, choices=self.values["MACHINES"].keys(),
                           help='Snapmaker machine version')
 
+        group.add_argument('--toolhead', default=self.values["TOOLHEAD_NAME"], choices=self.values["TOOLHEADS"],
+                          help='Snapmaker toolhead')
+
         return parser
 
     def process_arguments(self, filename: str = '-') -> (bool, str | argparse.Namespace):
@@ -188,6 +195,13 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
 
             if args.boundaries:  # may override machine boundaries, which is expected
                 self.values["BOUNDARIES"] = args.boundaries
+
+            if args.toolhead:
+                self.values["TOOLHEAD_NAME"] = args.toolhead.upper()
+            else:
+                self.values["TOOLHEAD_NAME"] = self.values["TOOLHEADS"][0]
+                FreeCAD.Console.PrintWarning(f'No toolhead selected, using default ({self.values["TOOLHEAD_NAME"]})\n'
+                                             f'Consider adding --toolhead')
 
             self.values["THUMBNAIL"] = args.thumbnail
             self.values["ALLOW_GUI"] = args.gui
