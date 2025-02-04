@@ -90,9 +90,9 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         self.values["COMMENT_SYMBOL"] = ';'
         self.values["ENABLE_MACHINE_SPECIFIC_COMMANDS"] = True
         self.values["END_OF_LINE_CHARACTERS"] = '\n'
-        self.values["FINISH_LABEL"] = "Finish"  # TODO: update finish
+        self.values["FINISH_LABEL"] = "End"
         self.values["LINE_INCREMENT"] = 1
-        self.values["MACHINE_NAME"] = 'Snapmaker'  # TODO: add snpamaker machine version
+        self.values["MACHINE_NAME"] = 'Generic Snapmaker'
         self.values["MODAL"] = True
         self.values["OUTPUT_PATH_LABELS"] = True
         self.values["OUTPUT_HEADER"] = True  # remove FreeCAD standard header and use a custom Snapmaker Header
@@ -112,8 +112,9 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
 
         # snapmaker values
         self.values["THUMBNAIL"] = True
-        self.values["MACHINE"] = dict(name='unknown', X=-1, Y=-1, Z=-1)
         self.values["MACHINES"] = SNAPMAKER_MACHINES
+        self.values["BOUNDARIES"] = dict(X=-1, Y=-1, Z=-1)
+
     def init_argument_defaults(self) -> None:
         """Initialize which arguments (in a pair) are shown as the default argument."""
         Path.Post.UtilsArguments.init_argument_defaults(self.argument_defaults)
@@ -181,8 +182,9 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         )
         if flag:  # process extra arguments only if flag is True
             if args.machine:
-                self.values["MACHINE"] = self.values["MACHINES"][args.machine]
-                self.values["BOUNDARIES"] = {key: self.values["MACHINE"][key] for key in ('X','Y','Z')}
+                self.values["MACHINE_NAME"] = self.values["MACHINES"][args.machine]['name']
+
+                self.values["BOUNDARIES"] = {key: self.values["MACHINES"][args.machine][key] for key in ('X','Y','Z')}
 
             if args.boundaries:  # may override machine boundaries, which is expected
                 self.values["BOUNDARIES"] = args.boundaries
@@ -307,7 +309,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
 
         add_comment('Header Start')
         add_comment('header_type: cnc')
-        add_comment(f'machine: {self.values["MACHINE"]["name"]}')
+        add_comment(f'machine: {self.values["MACHINE_NAME"]}')
         comment = Path.Post.UtilsParse.create_comment(
             self.values, f'Post Processor: {self.values["POSTPROCESSOR_FILE_NAME"]}'
         )
