@@ -25,9 +25,7 @@ import datetime
 import os
 import pathlib
 import re
-import sys
 import tempfile
-from distutils.command.check import check
 from typing import Any
 
 import FreeCAD
@@ -38,7 +36,6 @@ import Path.Post.UtilsExport
 import Path.Post.Utils
 import Path.Post.UtilsParse
 import Path.Main.Job
-from scipy.ndimage import maximum
 
 translate = FreeCAD.Qt.translate
 
