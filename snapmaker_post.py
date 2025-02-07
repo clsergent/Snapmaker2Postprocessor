@@ -1,17 +1,34 @@
 #!/usr/bin/env python3
+# A FreeCAD postprocessor targeting Snapmaker machines with CNC capabilities
+# ***************************************************************************
+# *  Copyright (c) 2025 Clair-Loup Sergent <clsergent@free.fr>              *
+# *                                                                         *
+# *  Licensed under the EUPL-1.2 with the specific provision                *
+# *  (EUPL articles 14 & 15) that the applicable law is the French law.     *
+# *  and the Jurisdiction Paris.                                            *
+# *  Any redistribution must include the specific provision above.          *
+# *                                                                         *
+# *  You may obtain a copy of the Licence at:                               *
+# *  https://joinup.ec.europa.eu/software/page/eupl5                        *
+# *                                                                         *
+# *  Unless required by applicable law or agreed to in writing, software    *
+# *  distributed under the Licence is distributed on an "AS IS" basis,      *
+# *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or        *
+# *  implied. See the Licence for the specific language governing           *
+# *  permissions and limitations under the Licence.                         *
+# ***************************************************************************
+
+
 import argparse
 import base64
 import datetime
 import os
 import pathlib
 import re
-# A FreeCAD postprocessor for the Snapmaker 2.0 CNC function
-# made by clsergent
-# licence is EUPL 1.2
-
 import sys
 import tempfile
-from typing import Sequence, Any
+from distutils.command.check import check
+from typing import Any
 
 import FreeCAD
 import Path
@@ -21,7 +38,7 @@ import Path.Post.UtilsExport
 import Path.Post.Utils
 import Path.Post.UtilsParse
 import Path.Main.Job
-from matplotlib.image import thumbnail
+from scipy.ndimage import maximum
 
 translate = FreeCAD.Qt.translate
 
@@ -40,22 +57,33 @@ SNAPMAKER_MACHINES = dict(
     artisan=dict(name='Snapmaker Artisan', X=400, Y=400, Z=400)
 )
 
-SNAPMAKER_TOOLHEADS = ('50W', '200W')
+SNAPMAKER_TOOLHEADS = {'50W':dict(name='50W CNC module', min=0, max=12000, percent=True),
+                       '200W':dict(name='200W CNC module', min=8000, max=18000, percent=False)}
 
 class CoordinatesAction(argparse.Action):
     """argparse Action to handle coordinates x,y,z"""
     def __call__(self, parser, namespace, values, option_string):
-        match = re.match('^ *(-?\d+\.?\d*),? *(-?\d+\.?\d*),? *(-?\d+\.?\d*) *$', values)
+        match = re.match('^\s*(?P<X>-?\d+\.?\d*),?\s*(?P<Y>-?\d+\.?\d*),?\s*(?P<Z>-?\d+\.?\d*)\s*$', values)
         if match:
             # setattr(namespace, self.dest, 'G0 X{0} Y{1} Z{2}'.format(*match.groups()))
-            params = {key: float(value) for key, value in zip(("X", "Y", "Z"), match.groups())}
+            params = {key: float(value) for key, value in match.groupdict().items()}
             setattr(namespace, self.dest, params)
         else:
             raise argparse.ArgumentError(None, message='invalid coordinates provided')
 
+class ExtremaAction(argparse.Action):
+    """argparse Action to handle integer extrema min,max"""
+    def __call__(self, parser, namespace, values, option_string):
+        if match := re.match('^ *(\d+),? *(\d+) *$', values):
+            # setattr(namespace, self.dest, 'G0 X{0} Y{1} Z{2}'.format(*match.groups()))
+            params = {key: int(value) for key, value in zip(('min','max',), match.groups())}
+            setattr(namespace, self.dest, params)
+        else:
+            raise argparse.ArgumentError(None, message='invalid values provided, should be int,int')
+
 
 class Snapmaker(Path.Post.Processor.PostProcessor):
-    """FreeCAD postprocessor for Snapmaker CNC function"""
+    """FreeCAD postprocessor targeting Snapmaker machines with CNC capabilities"""
     def __init__(self, job) -> None:
         super().__init__(
             job=job,
@@ -64,6 +92,10 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
             units="Metric",
         )
 
+        self.initialize()
+
+    def initialize(self):
+        """initialize values and arguments"""
         self.values: dict[str, Any] = dict()
         self.argument_defaults: dict[str, bool] = dict()
         self.arguments_visible: dict[str, bool] = dict()
@@ -80,7 +112,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
             all_arguments_visible[key] = True
         self.visible_parser = self.init_parser(self.values, self.argument_defaults, all_arguments_visible)
 
-        FreeCAD.Console.PrintLog(f'{self.values["POSTPROCESSOR_FILE_NAME"]}: initialized.')
+        FreeCAD.Console.PrintLog(f'{self.values["POSTPROCESSOR_FILE_NAME"]}: initialized.\n')
 
     def init_values(self):
         """Initialize values that are used throughout the postprocessor."""
@@ -94,7 +126,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         self.values["FINISH_LABEL"] = "End"
         self.values["LINE_INCREMENT"] = 1
         self.values["MACHINE_NAME"] = 'Generic Snapmaker'
-        self.values["MODAL"] = True
+        self.values["MODAL"] = False
         self.values["OUTPUT_PATH_LABELS"] = True
         self.values["OUTPUT_HEADER"] = True  # remove FreeCAD standard header and use a custom Snapmaker Header
         self.values["OUTPUT_TOOL_CHANGE"] = True
@@ -113,10 +145,16 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
 
         # snapmaker values
         self.values["THUMBNAIL"] = True
+        self.values["BOUNDARIES"] = None
+        self.values["BOUNDARIES_CHECK"] = False
         self.values["MACHINES"] = SNAPMAKER_MACHINES
         self.values["TOOLHEADS"] = SNAPMAKER_TOOLHEADS
-        self.values["TOOLHEAD_NAME"] = None
-        self.values["BOUNDARIES"] = dict(X=-1, Y=-1, Z=-1)
+        # default toolhead is 50W (the weakest one)
+        self.values["DEFAULT_TOOLHEAD"] = "50W"
+        self.values["TOOLHEAD_NAME"] = SNAPMAKER_TOOLHEADS[self.values["DEFAULT_TOOLHEAD"]]["name"]
+        self.values["SPINDLE_SPEEDS"] = dict(min=SNAPMAKER_TOOLHEADS[self.values["DEFAULT_TOOLHEAD"]]["min"],
+                                              max=SNAPMAKER_TOOLHEADS[self.values["DEFAULT_TOOLHEAD"]]["max"])
+        self.values["SPINDLE_PERCENT"] = SNAPMAKER_TOOLHEADS[self.values["DEFAULT_TOOLHEAD"]]["percent"]
 
     def init_argument_defaults(self) -> None:
         """Initialize which arguments (in a pair) are shown as the default argument."""
@@ -128,7 +166,8 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         # snapmaker arguments
         self.argument_defaults["thumbnail"] = True
         self.argument_defaults["gui"] = True
-        self.argument_defaults["boundaries-check"] = False
+        self.argument_defaults["boundaries-check"] = True
+        self.argument_defaults["spindle-percent"] = True
 
     def init_arguments_visible(self) -> None:
         """Initialize which argument pairs are visible in TOOLTIP_ARGS."""
@@ -145,9 +184,12 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         # snapmaker arguments (for record, always visible)
         self.arguments_visible["thumbnail"] = True
         self.arguments_visible["gui"] = True
+        self.arguments_visible["boundaries"] = True
         self.arguments_visible["boundaries-check"] = True
         self.arguments_visible["machine"] = True
         self.arguments_visible["toolhead"] = True
+        self.arguments_visible["line-increment"] = True
+        self.arguments_visible["spindle-speeds"] = True
 
     def init_parser(self, values, argument_defaults, arguments_visible) -> argparse.ArgumentParser:
         """Initialize the postprocessor arguments parser"""
@@ -158,27 +200,41 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         # add_flag_type_arguments function is not used as its behavior is inconsistent with argparse
         # handle thumbnail generation
         group.add_argument('--thumbnail', action='store_true', default=argument_defaults["thumbnail"],
-                           help='include a thumbnail (require --gui)')
-        group.add_argument('--no-thumbnail', action='store_false', dest='thumbnail', help='remove thumbnail')
+                           help='Include a thumbnail (require --gui)')
+        group.add_argument('--no-thumbnail', action='store_false', dest='thumbnail', help='Remove thumbnail')
 
         group.add_argument('--gui', action='store_true', default=argument_defaults["gui"],
                            help='allow the postprocessor to execute GUI methods')
         group.add_argument('--no-gui', action='store_false', dest='gui',
-                           help='execute postprocessor without requiring GUI')
+                           help='Execute postprocessor without requiring GUI')
 
         group.add_argument('--boundaries-check', action='store_true', default=argument_defaults["boundaries-check"],
                            help='check boundaries according to the machine build area')
         group.add_argument('--no-boundaries-check', action='store_false', dest='boundaries_check',
-                           help='disable boundaries check')
+                           help='Disable boundaries check')
 
-        group.add_argument("--boundaries", default=None, type=CoordinatesAction,
+        group.add_argument("--boundaries", action=CoordinatesAction, default=None,
                            help='Custom boundaries (e.g. "100, 200, 300"). Overrides --machine',)
 
         group.add_argument('--machine', default=None, choices=self.values["MACHINES"].keys(),
-                          help='Snapmaker machine version')
+                          help=f'Snapmaker machine (choices: {self.values["MACHINES"].keys()})')
 
-        group.add_argument('--toolhead', default=self.values["TOOLHEAD_NAME"], choices=self.values["TOOLHEADS"],
-                          help='Snapmaker toolhead')
+        group.add_argument('--toolhead', default=None, choices=self.values["TOOLHEADS"].keys(),
+                          help=f'Snapmaker toolhead (choices: {self.values["TOOLHEADS"].keys()}')
+
+        group.add_argument('--spindle-speeds', action=ExtremaAction, default=None,
+                           help="Set minimum/maximum spindle speeds as --spindle-speeds='min,max'")
+
+        group.add_argument('--spindle-percent', action='store_true', default=argument_defaults["spindle-percent"],
+                           help='use percent (%) as toolhead spindle speed unit')
+        group.add_argument('--spindle-rpm', action='store_false', dest='spindle_percent',
+                           help='Use RPM as toolhead spindle speed unit')
+
+        group.add_argument('--line-number', type=int, default=self.values["line_number"],
+                           help='Set the line starting value')
+
+        group.add_argument('--line-increment', type=int, default=self.values["LINE_INCREMENT"],
+                           help='Set the line increment value')
 
         return parser
 
@@ -188,23 +244,47 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
             self.values, self.parser, self._job.PostProcessorArgs, self.visible_parser, filename
         )
         if flag:  # process extra arguments only if flag is True
-            if args.machine:
-                self.values["MACHINE_NAME"] = self.values["MACHINES"][args.machine]['name']
+            self._units = self.values["UNITS"]
 
-                self.values["BOUNDARIES"] = {key: self.values["MACHINES"][args.machine][key] for key in ('X','Y','Z')}
+            if args.machine:
+                machine = self.values["MACHINES"][args.machine]
+                self.values["MACHINE_NAME"] = machine['name']
+                self.values["BOUNDARIES"] = {key: machine[key] for key in ('X','Y','Z')}
 
             if args.boundaries:  # may override machine boundaries, which is expected
                 self.values["BOUNDARIES"] = args.boundaries
 
             if args.toolhead:
-                self.values["TOOLHEAD_NAME"] = args.toolhead.upper()
+                toolhead = self.values["TOOLHEADS"][args.toolhead]
+                self.values["TOOLHEAD_NAME"] = toolhead["name"]
             else:
-                self.values["TOOLHEAD_NAME"] = self.values["TOOLHEADS"][0]
-                FreeCAD.Console.PrintWarning(f'No toolhead selected, using default ({self.values["TOOLHEAD_NAME"]})\n'
-                                             f'Consider adding --toolhead')
+                FreeCAD.Console.PrintWarning(f'No toolhead selected, using default ({self.values["TOOLHEAD_NAME"]}). '
+                                             f'Consider adding --toolhead\n')
+                toolhead = self.values["TOOLHEADS"][self.values["DEFAULT_TOOLHEAD"]]
+
+            self.values["SPINDLE_SPEEDS"] = {key: toolhead[key] for key in ('min', 'max')}
+
+            if args.spindle_speeds:  # may override toolhead value, which is expected
+                self.values["SPINDLE_SPEEDS"] = args.spindle_speeds
+
+            if args.spindle_percent is not None:
+                if toolhead["percent"] is True:
+                    self.values["SPINDLE_PERCENT"] = True
+                    if args.spindle_percent is False:
+                        FreeCAD.Console.PrintWarning(f'Toolhead does not handle RPM spindle speed, using % instead.\n')
+                else:
+                    self.values["SPINDLE_PERCENT"] = args.spindle_percent
 
             self.values["THUMBNAIL"] = args.thumbnail
             self.values["ALLOW_GUI"] = args.gui
+            self.values["line_number"] = args.line_number
+            self.values["LINE_INCREMENT"] = args.line_increment
+
+            if args.boundaries_check and not self.values["BOUNDARIES"]:
+                FreeCAD.Console.PrintError('Boundary check skipped: no valid boundaries supplied\n')
+                self.values["BOUNDARIES_CHECK"] = False
+            else:
+                self.values["BOUNDARIES_CHECK"] = args.boundaries_check
 
         return flag, args
 
@@ -220,49 +300,19 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
             filename = str(filename.with_stem(filename.stem + '_{name}'))
 
         for name, objects in postables:
-            print(f'name is {name}, filename is {filename}')
             gcode = self.export_common(objects, filename.format(name=name))
             sections.append((name, gcode))
 
         return sections
 
-    def get_job(self, objects) -> Path.Main.Job.ObjectJob | None:
-        """get the path job from the postprocessed objects"""
-        job = None
-        for obj in objects:  # get job from objects
-            try:
-                return obj.Proxy.getJob(obj)
-            except AttributeError:
-                FreeCAD.Console.PrintLog(f'No parent job was found for {obj}\n')
-        else:
-            if self.values["ALLOW_GUI"] and FreeCAD.GuiUp:  # get job from selection
-                import FreeCADGui
-                jobs = []
-                for selection in FreeCADGui.Selection.getSelection():
-                    if hasattr(selection, "Proxy") and isinstance(selection.Proxy, Path.Main.Job.ObjectJob):
-                        jobs.append(selection)
-
-                if len(jobs) > 0:
-                    if len(jobs) > 1:
-                        FreeCAD.Console.PrintWarning('Only one job should be selected, using the first one\n')
-                    return jobs[0]
-                else:
-                    FreeCAD.Console.PrintError('Failed to find a Path job. Select a Path job\n')
-            else:  # TODO: get job from document if GUI not up (job can be retrieved using Path.Main.Job.Instances())
-                FreeCAD.Console.PrintError('Failed to find a Path job. Consider adding --gui\n')
-
-    def get_thumbnail(self, job) -> str:
+    def get_thumbnail(self) -> str:
         """generate a thumbnail of the job from the given objects"""
         if self.values["THUMBNAIL"] is False:
-            return ''
-
-        if job is None:
-            FreeCAD.Console.PrintError('No valid Path job provided: thumbnail generation skipped\n')
-            return ''
+            return 'thumbnail: deactivated.'
 
         if not (self.values["ALLOW_GUI"] and FreeCAD.GuiUp):
             FreeCAD.Console.PrintError('GUI access required: thumbnail generation skipped. Consider adding --gui\n')
-            return ''
+            return 'thumbnail: GUI required.'
 
         # get FreeCAD references
         import FreeCADGui
@@ -282,7 +332,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
                 obj.Object.ViewObject.hide()
 
         # select models to display
-        for model in job.Model.Group:
+        for model in self._job.Model.Group:
             model.ViewObject.show()
             selection.addSelection(model.Document.Name, model.Name)
         view.fitAll()  # center selection
@@ -308,7 +358,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
 
         return f'thumbnail: data:image/png;base64,{base64.b64encode(data).decode()}'
 
-    def output_header(self, gcode: [[]], job: Path.Main.Job.ObjectJob):
+    def output_header(self, gcode: [[]]):
         """custom method derived from Path.Post.UtilsExport.output_header"""
         cam_file: str
         comment: str
@@ -334,7 +384,52 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
             cam_file = "<None>"
         add_comment(f'Cam File: {cam_file}')
         add_comment(f'Output Time: {datetime.datetime.now()}')
-        add_comment(self.get_thumbnail(job))
+        add_comment(self.get_thumbnail())
+
+    def convert_spindle(self, gcode: [str]) -> [str]:
+        """convert spindle speed values from RPM to percent (%) (M3/M4 commands)"""
+        if self.values["SPINDLE_PERCENT"] is False:
+            return
+
+        # TODO: check if percentage covers range 0-max (most probable) or min-max (200W has a documented min speed)
+        for index, commandline in enumerate(gcode):#.split(self.values["END_OF_LINE_CHARACTERS"]):
+            if match := re.match('(?P<command>M0?[34])\D.*(?P<spindle>S\d+.?\d*)', commandline):
+                percent = float(match.group('spindle')[1:]) * 100 / self.values["SPINDLE_SPEEDS"]["max"]
+                gcode[index] = gcode[index][:match.span('spindle')[0]] \
+                               + f'P{percent:.{self.values["SPINDLE_DECIMALS"]}f}' \
+                               + gcode[index][match.span('spindle')[1]:]
+        return gcode
+
+    def check_boundaries(self, gcode: [str]) -> bool:
+        """ Check boundaries and return whether it succeeded """
+        status = True
+        FreeCAD.Console.PrintLog('Boundaries check\n')
+
+        extrema = dict(X=[0, 0], Y=[0, 0], Z=[0, 0])
+        position = dict(X=0, Y=0, Z=0)
+        relative = False
+
+        for index, commandline in enumerate(gcode):
+            if re.match('G90(?:\D|$)', commandline):
+                relative = False
+            elif re.match('G91(?:\D|$)', commandline):
+                relative = True
+            elif re.match('G0?[12](?:\D|$)', commandline):
+                for axis, value in re.findall('(?P<axis>[XYZ])(?P<value>-?\d+\.?\d*)(?:\D|$)', commandline):
+                    if relative:
+                        position[axis] += float(value)
+                    else:
+                        position[axis] = float(value)
+                    extrema[axis][0] = max(extrema[axis][0], position[axis])
+                    extrema[axis][1] = min(extrema[axis][1], position[axis])
+
+        for axis in extrema.keys():
+            if abs(extrema[axis][0] - extrema[axis][1]) > self.values["BOUNDARIES"][axis]:
+                #gcode.insert(0, f';WARNING: Boundary check: job exceeds machine limit on {axis} axis{self.values["END_OF_LINE_CHARACTERS"]}')
+                FreeCAD.Console.PrintWarning(f'Boundary check: job exceeds machine limit on {axis} axis\n')
+                status = False
+
+        return status
 
     def export_common(self, objects: list, filename: str | pathlib.Path) -> str:
         """custom method derived from Path.Post.UtilsExport.export_common"""
@@ -349,9 +444,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
                 return ""
 
         Path.Post.UtilsExport.check_canned_cycles(self.values)
-        if self.values["OUTPUT_HEADER"]:
-            job = self.get_job(objects)
-            self.output_header(gcode, job)
+        self.output_header(gcode)
         Path.Post.UtilsExport.output_safetyblock(self.values, gcode)
         Path.Post.UtilsExport.output_tool_list(self.values, gcode, objects)
         Path.Post.UtilsExport.output_preamble(self.values, gcode)
@@ -370,6 +463,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
             Path.Post.UtilsExport.output_coolant_on(self.values, gcode, coolant_mode)
             # output the G-code for the group (compound) or simple path
             Path.Post.UtilsParse.parse_a_group(self.values, gcode, obj)
+
             Path.Post.UtilsExport.output_postop(self.values, gcode, obj)
             Path.Post.UtilsExport.output_coolant_off(self.values, gcode, coolant_mode)
 
@@ -385,6 +479,10 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         Path.Post.UtilsExport.output_tool_return(self.values, gcode)
         Path.Post.UtilsExport.output_safetyblock(self.values, gcode)
         Path.Post.UtilsExport.output_postamble(self.values, gcode)
+        gcode = self.convert_spindle(gcode)
+
+        if self.values["BOUNDARIES_CHECK"]:
+            self.check_boundaries(gcode)
 
         final = "".join(gcode)
 
@@ -414,10 +512,6 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
     @property
     def tooltipArgs(self) -> str:
         return self.parser.format_help()
-
-    @property
-    def units(self) -> str:
-        return self._units
 
 
 if __name__ == '__main__':
