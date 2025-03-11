@@ -1,3 +1,5 @@
+**⚠️ announcement: a deep refactoring work has been conducted to follow the new Postprocessing API in order to merge it into the FreeCAD distribution. Even several tests were conducted (and a unit test suite written) new bugs may occur, so remain cautious.**
+
 # Snapmaker2Postprocessor
 
 ## Overview
