@@ -58,8 +58,8 @@ SNAPMAKER_TOOLHEADS = {'50W':dict(name='50W CNC module', min=0, max=12000, perce
                        '200W':dict(name='200W CNC module', min=8000, max=18000, percent=False)}
 
 class CoordinatesAction(argparse.Action):
-    """argparse Action to handle coordinates x,y,z"""
-    def __call__(self, parser, namespace, values, option_string):
+    """argparse Action to handle coordinates (x,y,z)"""
+    def __call__(self, parser, namespace, values, option_string=None):
         match = re.match('^\s*(?P<X>-?\d+\.?\d*),?\s*(?P<Y>-?\d+\.?\d*),?\s*(?P<Z>-?\d+\.?\d*)\s*$', values)
         if match:
             # setattr(namespace, self.dest, 'G0 X{0} Y{1} Z{2}'.format(*match.groups()))
@@ -69,8 +69,8 @@ class CoordinatesAction(argparse.Action):
             raise argparse.ArgumentError(None, message='invalid coordinates provided')
 
 class ExtremaAction(argparse.Action):
-    """argparse Action to handle integer extrema min,max"""
-    def __call__(self, parser, namespace, values, option_string):
+    """argparse Action to handle integer extrema (min,max)"""
+    def __call__(self, parser, namespace, values, option_string=None):
         if match := re.match('^ *(\d+),? *(\d+) *$', values):
             # setattr(namespace, self.dest, 'G0 X{0} Y{1} Z{2}'.format(*match.groups()))
             params = {key: int(value) for key, value in zip(('min','max',), match.groups())}
@@ -134,11 +134,11 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         self.values["POST_OPERATION"] = """"""
         self.values["POSTAMBLE"] = """M400\nM5"""
         self.values["SHOW_MACHINE_UNITS"] = False
-        self.values["SPINDLE_DECIMALS"] = 0  # TODO: update spindle from rpm to percent
+        self.values["SPINDLE_DECIMALS"] = 0
         self.values["SPINDLE_WAIT"] = 4.0
         self.values["TOOL_CHANGE"] = "M76"  # handle tool change by inserting an HMI pause
         self.values["TRANSLATE_DRILL_CYCLES"] = True  # drill cycle gcode must be translated
-        self.values["USE_TLO"] = False  # G43 is not handled. TODO: check that nothing has to be added
+        self.values["USE_TLO"] = False  # G43 is not handled.
 
         # snapmaker values
         self.values["THUMBNAIL"] = True
@@ -214,10 +214,10 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
                            help='Custom boundaries (e.g. "100, 200, 300"). Overrides --machine',)
 
         group.add_argument('--machine', default=None, choices=self.values["MACHINES"].keys(),
-                          help=f'Snapmaker machine (choices: {self.values["MACHINES"].keys()})')
+                          help=f'Snapmaker machine')
 
         group.add_argument('--toolhead', default=None, choices=self.values["TOOLHEADS"].keys(),
-                          help=f'Snapmaker toolhead (choices: {self.values["TOOLHEADS"].keys()}')
+                          help=f'Snapmaker toolhead')
 
         group.add_argument('--spindle-speeds', action=ExtremaAction, default=None,
                            help="Set minimum/maximum spindle speeds as --spindle-speeds='min,max'")
@@ -268,7 +268,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
                 if toolhead["percent"] is True:
                     self.values["SPINDLE_PERCENT"] = True
                     if args.spindle_percent is False:
-                        FreeCAD.Console.PrintWarning(f'Toolhead does not handle RPM spindle speed, using % instead.\n')
+                        FreeCAD.Console.PrintWarning(f'Toolhead does not handle RPM spindle speed, using percents instead.\n')
                 else:
                     self.values["SPINDLE_PERCENT"] = args.spindle_percent
 
@@ -291,7 +291,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
 
         postables = self._buildPostList()
 
-        # basic filename handling. TODO: enhance this section
+        # basic filename handling
         if len(postables) > 1 and filename != '-':
             filename = pathlib.Path(filename)
             filename = str(filename.with_stem(filename.stem + '_{name}'))
@@ -365,8 +365,8 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
             return
 
         def add_comment(text):
-            comment = Path.Post.UtilsParse.create_comment(self.values, text)
-            gcode.append(f'{Path.Post.UtilsParse.linenumber(self.values)}{comment}{self.values["END_OF_LINE_CHARACTERS"]}')
+            com = Path.Post.UtilsParse.create_comment(self.values, text)
+            gcode.append(f'{Path.Post.UtilsParse.linenumber(self.values)}{com}{self.values["END_OF_LINE_CHARACTERS"]}')
 
         add_comment('Header Start')
         add_comment('header_type: cnc')
@@ -490,6 +490,12 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
             result = dia.exec_()
             if result:
                 final = dia.editor.toPlainText()
+
+        if not filename == "-":
+            with open(
+                    filename, "w", encoding="utf-8", newline=self.values["END_OF_LINE_CHARACTERS"]
+            ) as gfile:
+                gfile.write(final)
 
         return final
 
