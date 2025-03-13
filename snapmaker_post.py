@@ -223,7 +223,7 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
                            help="Set minimum/maximum spindle speeds as --spindle-speeds='min,max'")
 
         group.add_argument('--spindle-percent', action='store_true', default=argument_defaults["spindle-percent"],
-                           help='use percent (%) as toolhead spindle speed unit')
+                           help='use percent as toolhead spindle speed unit')
         group.add_argument('--spindle-rpm', action='store_false', dest='spindle_percent',
                            help='Use RPM as toolhead spindle speed unit')
 
