@@ -1,4 +1,9 @@
-**⚠️ announcement: a deep refactoring work has been conducted to follow the new Postprocessing API in order to merge it into the FreeCAD distribution. Even several tests were conducted (and a unit test suite written) new bugs may occur, so remain cautious.**
+**📌 This postprocessor is now part of FreeCAD! Last releases include it under the name *snapmaker*.**
+
+This repository remain active for multiple reasons:
+- new functionality will be updated here before being supplied to the FreeCAD repository
+- [issues](https://github.com/clsergent/Snapmaker2Postprocessor/issues) can still be opened here (and will be addressed!)
+- [discussions](https://github.com/clsergent/Snapmaker2Postprocessor/discussions) about the postprocessor can be conducted here as well
 
 # Snapmaker2Postprocessor
 
