@@ -584,7 +584,9 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
                 self.values["BOUNDARIES_CHECK"] = args.boundaries_check
 
             if self.values["USE_TLO"]:
-                self.values["TOOL_CHANGE"] += "\n{TLO_LINE1}\n{TLO_LINE2}"
+                self.values["TOOL_CHANGE"] = (
+                    "{TLO_LINE1}\n{TLO_LINE2}\n" + self.values["TOOL_CHANGE"]
+                )
                 self.values["TOOLS_LIST"] = {
                     str(tool.ToolNumber): tool for tool in self._job.Tools.Group
                 }
@@ -734,17 +736,16 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         tool_changes = 0
         ref_tool_length = 0
         safe_height = (
-                max([op.SafeHeight.getValueAs("mm") for op in
-                     self._job.Operations.Group])
-                + max(
-            [tool.Tool.Length.getValueAs("mm") for tool in self._job.Tools.Group])
+            max([op.SafeHeight.getValueAs("mm") for op in self._job.Operations.Group])
+            + max([tool.Tool.Length.getValueAs("mm") for tool in self._job.Tools.Group])
         )
 
+        index_M6 = len(self.values["TOOL_CHANGE"].splitlines())
         for index in range(len(gcode)):
             if (
                 "{TLO_LINE1}" in gcode[index] and "{TLO_LINE2}" in gcode[index + 1]
                 and (line3 := re.match(r".*(?P<command>M0?6)\s*T(?P<tool>\d+)",
-                                       gcode[index + 2]))
+                                       gcode[index + index_M6]))
             ):
                 if (tool_nbr := line3.group("tool")) in tools:
                     tool = tools[tool_nbr]
@@ -775,49 +776,6 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
                     )
                     raise ValueError("Custom TLO failed")
 
-    def convert_spindle_command(self, cmd: Path.Command) -> bool:
-        """convert spindle speed values from RPM to percent (%) (M3/M4 commands)"""
-        raise DeprecationWarning
-        if cmd.Name in ("M3", "M03", "M4", "M04") and "S" in cmd.Parameters:
-            percent = (
-                    float(cmd.Parameters["S"]) * 100 / self.values["SPINDLE_SPEEDS"][
-                "max"]
-            )
-            cmd.setFromGCode(f"{cmd.Name} P{percent}")
-            return True
-        return False
-
-    def get_TLO_commands(self, cmd: Path.Command) -> list[object]:
-        """return custom TLO commands from a G43 command"""
-        raise DeprecationWarning
-        if cmd.Name in ("G43",) and "H" in cmd.Parameters:
-            cmds = list()
-            tools = self.values["TOOLS_LIST"]
-            safe_height = self.values["SAFE_HEIGHT"]
-            tool_changes = self.values.get("TLO_TOOL_CHANGES", 0)
-            ref_tool_length = self.values.get("TLO_TOOL_LENGTH", 0)
-
-            tool_nbr = cmd.Parameters["H"]
-            tool = tools[tool_nbr]
-            if tool_changes > 0:
-                new_height = (
-                        safe_height
-                        + tool.Tool.Length.getValueAs("mm")
-                        - ref_tool_length
-                )
-                if new_height > self.values["BOUNDARIES"]["Z"]:
-                    FreeCAD.Console.PrintError(
-                        f"TLO failed: TLO exceed Z boundary ({new_height})"
-                    )
-                    raise ValueError("Custom TLO failed")
-                else:  # move to safe height then apply delta
-                    cmds.append(Path.Command("G0", {"Z": safe_height}))
-                    cmds.append(Path.Command("G92", {"Z": new_height}))
-            self.values["TLO_TOOL_LENGTH"] = tool.Tool.Length.getValueAs("mm")
-            self.values["TLO_TOOL_CHANGES"] = tool_changes + 1
-            return cmds
-        return []
-
     def check_boundaries(self, gcode: list[str]) -> bool:
         """Check boundaries and return whether it succeeded"""
         status = True
@@ -843,63 +801,13 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
                     extrema[axis][1] = max(extrema[axis][1], position[axis])
 
         for axis in extrema.keys():
-            if abs(extrema[axis][1] - extrema[axis][0]) > self.values["BOUNDARIES"][
-                axis]:
-                # gcode.insert(0, f';WARNING: Boundary check: job exceeds machine limit on {axis} axis{self.values["END_OF_LINE_CHARACTERS"]}')
+            if abs(extrema[axis][1] - extrema[axis][0]) > self.values["BOUNDARIES"][axis]:
                 FreeCAD.Console.PrintWarning(
                     f"Boundary check: job exceeds machine limit on {axis} axis\n"
                 )
                 status = False
         FreeCAD.Console.PrintLog("Boundaries checked\n")
         return status
-
-    # redefined UtilsParse function
-    def parse_a_group(
-            self,
-            values: Path.Post.UtilsParse, gcode,
-            pathobj
-    ) -> None:
-        """
-        custom method derived from Path.Post.UtilsParse.parse_a_group
-        it adds custom replacements: spindle speed conversion, TLO
-        """
-        raise DeprecationWarning
-        comment: str
-        linenumber = Path.Post.UtilsParse.linenumber
-        create_comment = Path.Post.UtilsParse.create_comment
-
-        if hasattr(pathobj, "Group"):  # We have a compound or project.
-            if values["OUTPUT_COMMENTS"]:
-                comment = create_comment(values, f"Compound: {pathobj.Label}")
-                gcode.append(f"{linenumber(values)}{comment}")
-            for p in pathobj.Group:
-                self.parse_a_group(values, gcode, p)
-        else:  # parsing simple path
-            # groups might contain non-path things like stock.
-            if not hasattr(pathobj, "Path"):
-                return
-            if values["OUTPUT_PATH_LABELS"] and values["OUTPUT_COMMENTS"]:
-                comment = create_comment(values, f"Path: {pathobj.Label}")
-                gcode.append(f"{linenumber(values)}{comment}")
-
-            # update Path Commands with custom commands
-            cmd_index = 0
-            for cmd in pathobj.Path.Commands:
-                # update cmd to match spindle speed choice
-                if self.values["SPINDLE_PERCENT"]:
-                    if self.convert_spindle_command(cmd):
-                        print(cmd)
-
-                # insert TLO commands
-                if self.values["USE_TLO"]:
-                    if len(tlo_cmds := self.get_TLO_commands(cmd)) > 0:
-                        print('TLO', tlo_cmds)
-                        pathobj.Path.deleteCommand(cmd_index)
-                        for tlo_index, tlo_cmd in enumerate(tlo_cmds):
-                            pathobj.Path.insertCommand(tlo_cmd, cmd_index + tlo_index)
-                        cmd_index += tlo_index
-                cmd_index += 1
-            Path.Post.UtilsParse.parse_a_path(values, gcode, pathobj)
 
     # redefined UtilsParse function
     def export_common(self, objects: list, filename: str | pathlib.Path) -> str:
@@ -932,7 +840,6 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
             Path.Post.UtilsExport.output_coolant_on(self.values, gcode, coolant_mode)
             # output the G-code for the group (compound) or simple path
             Path.Post.UtilsParse.parse_a_group(self.values, gcode, obj)
-            #self.parse_a_group(self.values, gcode, obj)
 
             Path.Post.UtilsExport.output_postop(self.values, gcode, obj)
             Path.Post.UtilsExport.output_coolant_off(self.values, gcode, coolant_mode)
