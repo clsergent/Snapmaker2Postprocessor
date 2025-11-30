@@ -867,8 +867,12 @@ class Snapmaker(Path.Post.Processor.PostProcessor):
         final = "\n".join(gcode)
 
         if FreeCAD.GuiUp and self.values["SHOW_EDITOR"]:
-            # size limit removed as irrelevant on my computer - see if issues occur
-            final = Path.Post.Utils.editor(final)
+            if len(final) > 100000:  # https://github.com/clsergent/Snapmaker2Postprocessor/issues/22
+                FreeCAD.Console.PrintWarning(
+                    f"Skipping GCODE editor, output size in greater than 100kB"
+                )
+            else:
+                final = Path.Post.Utils.editor(final)
 
         if self.values["END_OF_LINE_CHARACTERS"] != '\n':
             final = final.replace("\n", self.values["END_OF_LINE_CHARACTERS"])
